@@ -18,53 +18,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  plan:
-    name: Terraform Plan
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Configure AWS Credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
-          audience: sts.amazonaws.com
-
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: '1.9.5'
-
-      - name: Terraform Init
-        run: |
-          if [ -f "infrastructure/backend.hcl" ]; then
-            terraform -chdir=infrastructure init -backend-config=backend.hcl
-          else
-            terraform -chdir=infrastructure init -backend=false
-          fi
-
-      - name: Terraform Plan
-        run: |
-          terraform -chdir=infrastructure plan \
-            -var="github_repo=${{ github.repository }}" \
-            -var="github_access_token=${{ secrets.AMPLIFY_GITHUB_TOKEN || 'dummy-plan-token' }}" \
-            -out=tfplan
-
-      - name: Upload Terraform Plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan
-          path: infrastructure/tfplan
-          retention-days: 1
-
-  apply:
-    name: Terraform Apply (Gated by Environment)
-    needs: plan
+  deploy:
+    name: Terraform Plan & Apply (Production)
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -74,6 +29,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Verify Deployment Prerequisites
+        env:
+          AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_GITHUB_TOKEN }}
+        run: |
+          echo "Checking deployment prerequisites..."
+          ERRORS=0
+
+          if [ ! -f "infrastructure/backend.hcl" ]; then
+            echo "::error::Remote backend configuration file 'infrastructure/backend.hcl' not found!"
+            echo "::error::Running apply with a local backend in CI/CD is strictly prohibited. State would be lost upon runner termination, causing orphaned AWS resources."
+            echo "::error::Execute the initial bootstrap and provide infrastructure/backend.hcl before triggering CI deployments."
+            ERRORS=$((ERRORS + 1))
+          fi
+
+          if [ -z "$AMPLIFY_GITHUB_TOKEN" ]; then
+            echo "::error::Secret AMPLIFY_GITHUB_TOKEN is missing or empty!"
+            echo "::error::AWS Amplify requires a valid GitHub Personal Access Token to connect the repository and build the frontend. An invalid or placeholder token causes silent build failures."
+            echo "::error::Configure AMPLIFY_GITHUB_TOKEN in GitHub repository secrets (Settings > Secrets and variables > Actions > Secrets)."
+            ERRORS=$((ERRORS + 1))
+          fi
+
+          if [ $ERRORS -gt 0 ]; then
+            echo "Prerequisites check failed with $ERRORS error(s). Aborting pipeline."
+            exit 1
+          fi
+          echo "All prerequisites verified successfully."
+
       - name: Configure AWS Credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -86,19 +68,18 @@ jobs:
         with:
           terraform_version: '1.9.5'
 
-      - name: Download Terraform Plan
-        uses: actions/download-artifact@v4
-        with:
-          name: tfplan
-          path: infrastructure
-
       - name: Terraform Init
         run: |
-          if [ -f "infrastructure/backend.hcl" ]; then
-            terraform -chdir=infrastructure init -backend-config=backend.hcl
-          else
-            terraform -chdir=infrastructure init -backend=false
-          fi
+          terraform -chdir=infrastructure init -backend-config=backend.hcl
+
+      - name: Terraform Plan
+        env:
+          AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_GITHUB_TOKEN }}
+        run: |
+          terraform -chdir=infrastructure plan \
+            -var="github_repo=${{ github.repository }}" \
+            -var="github_access_token=${AMPLIFY_GITHUB_TOKEN}" \
+            -out=tfplan
 
       - name: Terraform Apply
         run: |
