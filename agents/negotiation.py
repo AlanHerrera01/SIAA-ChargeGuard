@@ -117,22 +117,3 @@ Important:
     )
 
     return result.structured_output
-
-
-if __name__ == "__main__":
-    result = evaluate_counter_offer(
-        requested_amount_usd=4.50,
-        offered_amount_usd=2.70,
-        dispute_reason=(
-            "Netflix increased the recurring subscription charge "
-            "from $15.49 to $19.99."
-        ),
-        evidence_summary=(
-            "Five previous recurring charges were $15.49. "
-            "The previous and current invoices are available. "
-            "Subscription terms are available. "
-            "No price-change notification was found."
-        ),
-    )
-
-    print(result)

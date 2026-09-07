@@ -1,4 +1,3 @@
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -7,6 +6,10 @@ from pydantic import BaseModel
 from strands import Agent
 
 from config import MODEL_ID
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATASETS_DIR = PROJECT_ROOT / "datasets"
 
 
 class EvidenceResult(BaseModel):
@@ -42,17 +45,6 @@ class EvidenceResult(BaseModel):
     subscription_terms_uri: str | None
 
     summary: str
-
-
-# -------------------------------------------------------------------
-# STRANDS SPECIALIST
-#
-# We keep this Agent registered so EvidenceAgent still exists as one
-# of the specialized tools available to ChargeGuardOrchestrator.
-#
-# The deterministic production flow does NOT need to invoke Sonnet
-# just to calculate evidence that Python can establish reliably.
-# -------------------------------------------------------------------
 
 SYSTEM_PROMPT = """
 You are EvidenceAgent.
@@ -95,7 +87,7 @@ def search_price_change_notice(
     merchant_name: str,
 ) -> bool:
 
-    emails_path = Path("datasets/emails")
+    emails_path = DATASETS_DIR / "emails"
 
     if not emails_path.exists():
         return False
@@ -138,7 +130,7 @@ def search_cancellation_confirmation(
     merchant_name: str,
 ) -> tuple[bool, str | None]:
 
-    emails_path = Path("datasets/emails")
+    emails_path = DATASETS_DIR / "emails"
 
     if not emails_path.exists():
         return False, None
@@ -203,7 +195,7 @@ def invoice_exists(
     ).name
 
     pdf_path = (
-        Path("datasets/invoices")
+        DATASETS_DIR / "invoices"
         / invoice_name
     )
 
@@ -229,7 +221,7 @@ def get_local_invoice_uri(
     ).name
 
     pdf_path = (
-        Path("datasets/invoices")
+        DATASETS_DIR / "invoices"
         / invoice_name
     )
 
@@ -262,7 +254,7 @@ def subscription_terms_found(
     ).name
 
     pdf_path = (
-        Path("datasets/terms")
+        DATASETS_DIR / "terms"
         / terms_name
     )
 
@@ -288,7 +280,7 @@ def get_subscription_terms_uri(
     ).name
 
     pdf_path = (
-        Path("datasets/terms")
+        DATASETS_DIR / "terms"
         / terms_name
     )
 
@@ -939,104 +931,3 @@ def gather_evidence(
 
         summary=summary,
     )
-
-
-# -------------------------------------------------------------------
-# MANUAL DEVELOPMENT TEST
-# -------------------------------------------------------------------
-
-if __name__ == "__main__":
-
-    transactions_path = Path(
-        "datasets/transactions.json"
-    )
-
-    subscriptions_path = Path(
-        "datasets/subscriptions.json"
-    )
-
-    with open(
-        transactions_path,
-        "r",
-        encoding="utf-8",
-    ) as file:
-        transactions = json.load(file)
-
-    with open(
-        subscriptions_path,
-        "r",
-        encoding="utf-8",
-    ) as file:
-        subscriptions = json.load(file)
-
-    transaction_id = "txn_0053"
-    anomaly_type = "POST_CANCELLATION"
-
-    current_transaction = next(
-        tx
-        for tx in transactions
-        if tx["transaction_id"]
-        == transaction_id
-    )
-
-    previous_transactions = sorted(
-        [
-            tx
-            for tx in transactions
-            if (
-                tx["subscription_id"]
-                == current_transaction[
-                    "subscription_id"
-                ]
-                and tx["posted_at"]
-                < current_transaction[
-                    "posted_at"
-                ]
-            )
-        ],
-        key=lambda tx: tx[
-            "posted_at"
-        ],
-    )
-
-    previous_transaction = (
-        previous_transactions[-1]
-        if previous_transactions
-        else None
-    )
-
-    subscription = next(
-        (
-            sub
-            for sub in subscriptions
-            if (
-                sub["subscription_id"]
-                == current_transaction[
-                    "subscription_id"
-                ]
-            )
-        ),
-        None,
-    )
-
-    terms_key = (
-        subscription.get(
-            "terms_key"
-        )
-        if subscription
-        else None
-    )
-
-    result = gather_evidence(
-        anomaly_type=anomaly_type,
-        current_transaction=(
-            current_transaction
-        ),
-        previous_transaction=(
-            previous_transaction
-        ),
-        terms_key=terms_key,
-        subscription=subscription,
-    )
-
-    print(result)

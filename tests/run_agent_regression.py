@@ -1,29 +1,41 @@
+import json
+from pathlib import Path
+
 from agents.orchestrator import run_chargeguard_case
 
 
-CASES = [
-    {
-        "name": "Price increase",
-        "transaction_id": "txn_0031",
-        "expected_type": "PRICE_INCREASE",
-        "expected_claim_type": "price_hike",
-        "expected_amount": 4.50,
-    },
-    {
-        "name": "Duplicate charge",
-        "transaction_id": "txn_0044",
-        "expected_type": "DUPLICATE_CHARGE",
-        "expected_claim_type": "duplicate_charge",
-        "expected_amount": 10.99,
-    },
-    {
-        "name": "Charge after cancellation",
-        "transaction_id": "txn_0053",
-        "expected_type": "POST_CANCELLATION",
-        "expected_claim_type": "charge_after_cancellation",
-        "expected_amount": 12.99,
-    },
-]
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+GROUND_TRUTH_PATH = PROJECT_ROOT / "datasets" / "ground_truth.json"
+
+
+def load_cases():
+    anomalies = json.loads(GROUND_TRUTH_PATH.read_text(encoding="utf-8"))["anomalies"]
+    by_type = {anomaly["type"]: anomaly for anomaly in anomalies}
+    return [
+        {
+            "name": "Price increase",
+            "expected_type": "PRICE_INCREASE",
+            "expected_claim_type": "price_hike",
+            **by_type["price_hike"],
+        },
+        {
+            "name": "Duplicate charge",
+            "expected_type": "DUPLICATE_CHARGE",
+            "expected_claim_type": "duplicate_charge",
+            "expected_duplicate_seconds": 480,
+            **by_type["duplicate_charge"],
+        },
+        {
+            "name": "Charge after cancellation",
+            "expected_type": "POST_CANCELLATION",
+            "expected_claim_type": "charge_after_cancellation",
+            "expected_days_after_cancellation": 6,
+            **by_type["charge_after_cancellation"],
+        },
+    ]
+
+
+CASES = load_cases()
 
 
 def assert_equal(label, actual, expected):
@@ -76,9 +88,21 @@ def run_case(case):
     )
 
     assert_money(
+        "expected amount",
+        analysis.expected_amount,
+        case["expected_amount_usd"],
+    )
+
+    assert_money(
+        "actual amount",
+        analysis.actual_amount,
+        case["actual_amount_usd"],
+    )
+
+    assert_money(
         "anomaly amount",
         analysis.difference,
-        case["expected_amount"],
+        case["expected_claim_amount_usd"],
     )
 
     # ---------------------------------------------------------
@@ -112,7 +136,13 @@ def run_case(case):
         assert_equal(
             "duplicate transaction id",
             evidence.duplicate_transaction_id,
-            "txn_0043",
+            case["previous_transaction_id"],
+        )
+
+        assert_equal(
+            "duplicate seconds apart",
+            evidence.duplicate_seconds_apart,
+            case["expected_duplicate_seconds"],
         )
 
     elif case["expected_type"] == "POST_CANCELLATION":
@@ -125,7 +155,7 @@ def run_case(case):
         assert_equal(
             "days after cancellation",
             evidence.days_after_cancellation,
-            6,
+            case["expected_days_after_cancellation"],
         )
 
     # ---------------------------------------------------------
@@ -145,7 +175,7 @@ def run_case(case):
     assert_money(
         "requested refund",
         dispute.requested_amount_usd,
-        case["expected_amount"],
+        case["expected_claim_amount_usd"],
     )
 
     # ---------------------------------------------------------

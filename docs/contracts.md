@@ -106,6 +106,9 @@ Generated deterministically by `datasets/generate.py --seed 42`. Regenerating wi
 }
 ```
 
+For `duplicate_charge`, the anomaly also includes `previous_transaction_id`,
+which identifies the original transaction that the anomalous charge duplicates.
+
 The three injected anomalies — exactly these, all inside the last 45 days of the dataset:
 
 | id | type | scenario | expected claim |

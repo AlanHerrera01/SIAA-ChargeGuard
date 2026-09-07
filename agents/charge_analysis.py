@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel
@@ -125,52 +124,3 @@ For POST_CANCELLATION:
     )
 
     return result.structured_output
-
-
-if __name__ == "__main__":
-    transactions_path = Path("datasets/transactions.json")
-    subscriptions_path = Path("datasets/subscriptions.json")
-
-    with open(transactions_path, "r", encoding="utf-8") as file:
-        transactions = json.load(file)
-
-    with open(subscriptions_path, "r", encoding="utf-8") as file:
-        subscriptions = json.load(file)
-
-    # CASO 3: charge after cancellation
-    transaction_id = "txn_0053"
-
-    current_transaction = next(
-        tx
-        for tx in transactions
-        if tx["transaction_id"] == transaction_id
-    )
-
-    subscription_id = current_transaction["subscription_id"]
-
-    previous_transactions = sorted(
-        [
-            tx
-            for tx in transactions
-            if tx["subscription_id"] == subscription_id
-            and tx["posted_at"] < current_transaction["posted_at"]
-        ],
-        key=lambda tx: tx["posted_at"],
-    )
-
-    subscription = next(
-        (
-            sub
-            for sub in subscriptions
-            if sub["subscription_id"] == subscription_id
-        ),
-        None,
-    )
-
-    result = analyze_charge(
-        current_transaction=current_transaction,
-        previous_transactions=previous_transactions,
-        subscription=subscription,
-    )
-
-    print(result)

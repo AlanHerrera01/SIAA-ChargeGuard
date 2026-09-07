@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import time
@@ -422,8 +423,12 @@ def run_chargeguard_case(transaction_id: str):
 
 
 if __name__ == "__main__":
-
-    transaction_id = "txn_0053"
+    parser = argparse.ArgumentParser(description="Run a ChargeGuard case")
+    parser.add_argument(
+        "transaction_id",
+        help="Canonical transaction ID, for example txn_0031",
+    )
+    transaction_id = parser.parse_args().transaction_id
 
     result = run_chargeguard_case(
         transaction_id
