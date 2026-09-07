@@ -1,0 +1,10 @@
+# Ejemplo de variables para despliegue
+aws_region              = "us-east-1"
+environment             = "dev"
+github_repo             = "AlanHerrera01/SIAA-ChargeGuard"
+github_access_token     = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+bedrock_model_id        = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+bedrock_model_id_fast   = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+amplify_branch          = "main"
+evidence_retention_days = 30
+cors_allow_origins      = ["*"]
