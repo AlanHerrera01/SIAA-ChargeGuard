@@ -22,7 +22,7 @@ demo-reset:
 	$(PYTHON) scripts/demo_reset.py
 
 test:
-	$(PYTHON) -m pytest mock-services/bank mock-services/merchant
+	$(PYTHON) -m pytest datasets mock-services/bank mock-services/merchant scripts
 
 fmt:
 	$(PYTHON) -m ruff format mock-services/bank mock-services/merchant scripts

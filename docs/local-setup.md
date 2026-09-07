@@ -9,7 +9,7 @@ Dockerfiles.
 - Git.
 - Docker Desktop (Windows/macOS) o Docker Engine con Compose 2.24 o posterior (Linux).
 - GNU Make. En Windows, ejecuta los comandos desde Git Bash y comprueba `make --version`.
-- Python 3.12 para los targets de seed, pruebas y formato que se completarán en sus WPs.
+- Python 3.12 para los targets de seed, pruebas y formato.
 
 ## Primera ejecución
 
@@ -52,13 +52,36 @@ comercio incluye `{"status":"ok"}`.
 | `make up-all` | Levanta también backend y frontend mediante el perfil `app`. |
 | `make down` | Detiene el proyecto y elimina sus volúmenes. |
 | `make logs` | Sigue los logs de todos los servicios. |
-| `make seed` | Ejecuta el seed local, disponible desde WP-5. |
-| `make demo-reset` | Restablece la demo, disponible desde WP-5. |
-| `make test` | Ejecuta las pruebas de los mocks. |
+| `make seed` | Crea/reutiliza las tablas y el bucket; carga transacciones y evidencia. |
+| `make demo-reset` | Borra y recrea las tres tablas locales, recarga datos y resetea ambos mocks. |
+| `make test` | Ejecuta las pruebas de datasets, mocks y scripts; integración opt-in. |
 | `make fmt` | Formatea Python y Terraform. |
 | `make clean` | Elimina contenedores, volúmenes e imágenes construidas localmente. |
 
 No uses `make up-all` hasta que existan `backend/Dockerfile` y `frontend/Dockerfile`.
+
+## Cargar y restablecer datos
+
+En un entorno virtual activado, instala las dependencias del seed:
+
+```bash
+python -m pip install -r scripts/requirements-dev.txt
+make up
+make seed
+python -m pytest scripts --localstack
+make demo-reset
+```
+
+El reset elimina los casos y decisiones locales y el estado de **ambos** mocks;
+solo las transacciones sintéticas se recuperan automáticamente desde disco.
+No borra el bucket ni los archivos locales. Rechaza endpoints de AWS real.
+Las salidas indican los conteos cargados, el resultado por mock y el tiempo total.
+
+Los scripts leen `.env` sin sobreescribir variables exportadas. Endpoint ausente
+significa LocalStack; `AWS_ENDPOINT_URL=` vacío significa AWS real para el seed.
+Revisa [scripts/README.md](../scripts/README.md) para credenciales, comprobaciones
+con AWS CLI y limitaciones. `make test` también requiere las dependencias de
+datasets y de ambos mocks, no solo las del seed.
 
 ## Solución de problemas
 
