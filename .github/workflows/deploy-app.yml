@@ -1,0 +1,121 @@
+name: Deploy Application
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - 'agents/**'
+      - 'frontend/**'
+      - '.github/workflows/deploy-app.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-app
+  cancel-in-progress: false
+
+jobs:
+  filter:
+    name: Detect App Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'agents/**'
+              - '.github/workflows/deploy-app.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/deploy-app.yml'
+
+  deploy-backend:
+    name: Build & Deploy Backend Lambda
+    needs: filter
+    if: ${{ needs.filter.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          audience: sts.amazonaws.com
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Package and Deploy Lambda Code
+        run: |
+          if [ -d "backend" ] && [ -f "backend/main.py" ]; then
+            echo "Packaging backend application..."
+            mkdir -p build_pkg
+            if [ -f "backend/requirements.txt" ]; then
+              pip install -r backend/requirements.txt -t build_pkg/
+            fi
+            cp -r backend/* build_pkg/
+            if [ -d "agents" ]; then
+              cp -r agents build_pkg/
+            fi
+            cd build_pkg
+            zip -r ../backend_deploy.zip .
+            cd ..
+            echo "Deploying zip artifact to Lambda chargeguard-backend..."
+            aws lambda update-function-code \
+              --function-name chargeguard-backend \
+              --zip-file fileb://backend_deploy.zip
+          else
+            echo "No deployable backend/main.py found yet; skipping Lambda package deployment."
+          fi
+
+  deploy-frontend:
+    name: Trigger Amplify Frontend Build
+    needs: filter
+    if: ${{ needs.filter.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          audience: sts.amazonaws.com
+
+      - name: Trigger Amplify Release Job
+        run: |
+          if [ -n "${{ vars.AMPLIFY_APP_ID }}" ]; then
+            echo "Triggering Amplify build job for app ${{ vars.AMPLIFY_APP_ID }}..."
+            aws amplify start-job \
+              --app-id "${{ vars.AMPLIFY_APP_ID }}" \
+              --branch-name main \
+              --job-type RELEASE
+          else
+            echo "vars.AMPLIFY_APP_ID is not configured in repository variables; skipping Amplify trigger."
+          fi

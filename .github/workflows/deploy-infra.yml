@@ -1,0 +1,105 @@
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'infrastructure/**'
+      - '.github/workflows/deploy-infra.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-infra
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          audience: sts.amazonaws.com
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.5'
+
+      - name: Terraform Init
+        run: |
+          if [ -f "infrastructure/backend.hcl" ]; then
+            terraform -chdir=infrastructure init -backend-config=backend.hcl
+          else
+            terraform -chdir=infrastructure init -backend=false
+          fi
+
+      - name: Terraform Plan
+        run: |
+          terraform -chdir=infrastructure plan \
+            -var="github_repo=${{ github.repository }}" \
+            -var="github_access_token=${{ secrets.AMPLIFY_GITHUB_TOKEN || 'dummy-plan-token' }}" \
+            -out=tfplan
+
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: infrastructure/tfplan
+          retention-days: 1
+
+  apply:
+    name: Terraform Apply (Gated by Environment)
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          audience: sts.amazonaws.com
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.5'
+
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: infrastructure
+
+      - name: Terraform Init
+        run: |
+          if [ -f "infrastructure/backend.hcl" ]; then
+            terraform -chdir=infrastructure init -backend-config=backend.hcl
+          else
+            terraform -chdir=infrastructure init -backend=false
+          fi
+
+      - name: Terraform Apply
+        run: |
+          terraform -chdir=infrastructure apply -auto-approve tfplan
