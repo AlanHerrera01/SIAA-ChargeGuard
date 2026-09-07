@@ -11,8 +11,7 @@ variable "account_id" {
 
 variable "github_repo" {
   type        = string
-  description = "GitHub repository formatted as owner/repo"
-  default     = "AlanHerrera01/SIA-ChargeGuard"
+  description = "GitHub repository formatted as owner/repo (e.g. AlanHerrera01/SIAA-ChargeGuard)"
 }
 
 variable "dynamodb_table_arns" {

@@ -55,9 +55,10 @@ module "eventbridge" {
 module "amplify" {
   source = "./modules/amplify"
 
-  github_repo     = var.github_repo
-  branch_name     = var.amplify_branch
-  api_gateway_url = module.lambda_api.api_gateway_endpoint
+  github_repo         = var.github_repo
+  github_access_token = var.github_access_token
+  branch_name         = var.amplify_branch
+  api_gateway_url     = module.lambda_api.api_gateway_endpoint
 }
 
 # 7. AgentCore: Architectural preparation and dedicated CloudWatch log group

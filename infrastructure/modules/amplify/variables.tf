@@ -1,7 +1,12 @@
 variable "github_repo" {
   type        = string
-  description = "GitHub repository for Amplify (e.g. AlanHerrera01/SIA-ChargeGuard)"
-  default     = "AlanHerrera01/SIA-ChargeGuard"
+  description = "GitHub repository for Amplify (e.g. AlanHerrera01/SIAA-ChargeGuard)"
+}
+
+variable "github_access_token" {
+  type        = string
+  description = "GitHub Personal Access Token for Amplify repository connection"
+  sensitive   = true
 }
 
 variable "branch_name" {

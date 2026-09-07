@@ -12,8 +12,13 @@ variable "environment" {
 
 variable "github_repo" {
   type        = string
-  description = "GitHub repository formatted as owner/repo for OIDC trust and Amplify integration"
-  default     = "AlanHerrera01/SIA-ChargeGuard"
+  description = "GitHub repository formatted as owner/repo for OIDC trust and Amplify integration (e.g. AlanHerrera01/SIAA-ChargeGuard)"
+}
+
+variable "github_access_token" {
+  type        = string
+  description = "GitHub Personal Access Token for AWS Amplify Hosting repository access"
+  sensitive   = true
 }
 
 variable "bedrock_model_id" {

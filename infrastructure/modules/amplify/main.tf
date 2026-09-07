@@ -1,8 +1,9 @@
 resource "aws_amplify_app" "frontend" {
-  name        = "chargeguard-frontend"
-  repository  = "https://github.com/${var.github_repo}"
-  platform    = "WEB"
-  description = "ChargeGuard Everyday Autonomous Subscription Dispute Agent Frontend"
+  name         = "chargeguard-frontend"
+  repository   = "https://github.com/${var.github_repo}"
+  access_token = var.github_access_token
+  platform     = "WEB"
+  description  = "ChargeGuard Everyday Autonomous Subscription Dispute Agent Frontend"
 
   build_spec = <<-EOT
     version: 1
