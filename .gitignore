@@ -61,6 +61,7 @@ override.tf.json
 *_override.tf.json
 tfplan
 tfplan.*
+*.zip
 
 # ==============================
 # IDE & OS
