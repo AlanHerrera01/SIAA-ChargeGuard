@@ -90,20 +90,34 @@ The agent **always** pauses and asks the user when:
 
 ## Local Setup
 
-*[TBD - full docker-compose instructions]*
-
 Quick start:
 ```bash
-git clone https://github.com/AlanHerrera01/SIA-ChargeGuard.git
-cd SIA-ChargeGuard
+git clone https://github.com/AlanHerrera01/SIAA-ChargeGuard.git
+cd SIAA-ChargeGuard
 cp .env.example .env
-# fill in .env
-docker-compose up
+docker compose --profile app up --build
 ```
+
+Services:
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+- Mock Bank: http://localhost:8001
+- Mock Merchant: http://localhost:8002
+- LocalStack: http://localhost:4566
+
+The frontend container is a production Vite build served by Nginx. It reads
+`VITE_*` values at Docker build time through compose build args, so rebuild the
+image after changing frontend API URLs.
+
+Backend calls Bedrock through the configured AWS profile/credentials. For local
+Docker runs, set the required AWS/Bedrock values in `.env` before starting the
+`app` profile.
 
 ## AWS Deployment
 
-*[TBD - Terraform instructions]*
+Terraform infrastructure lives in `infrastructure/`. The current AWS path uses
+API Gateway + Lambda for the backend and Amplify Hosting for the frontend.
+Follow `infrastructure/README.md` for bootstrap, remote state and apply steps.
 
 ## Demo Scenario
 

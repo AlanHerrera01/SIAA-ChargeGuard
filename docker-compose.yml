@@ -118,22 +118,28 @@ services:
     profiles: [app]
     build:
       context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_CHARGEGUARD_DATA_SOURCE: ${VITE_CHARGEGUARD_DATA_SOURCE:-api}
+        VITE_BACKEND_API_URL: ${VITE_BACKEND_API_URL:-http://localhost:8000}
+        VITE_MOCK_BANK_API_URL: ${VITE_MOCK_BANK_API_URL:-http://localhost:8001}
+        VITE_MOCK_MERCHANT_API_URL: ${VITE_MOCK_MERCHANT_API_URL:-http://localhost:8002}
+        VITE_DEMO_USER_ID: ${VITE_DEMO_USER_ID:-usr_demo}
+        VITE_DEFAULT_CASE_ID: ${VITE_DEFAULT_CASE_ID:-case_spotify_001}
     <<: *service-defaults
     ports:
-      - "5173:5173"
-    env_file: *default-env-file
+      - "5173:8080"
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
       test:
         - CMD
-        - node
-        - -e
-        - >-
-          fetch('http://localhost:5173').then((response) => {
-            if (!response.ok) process.exit(1)
-          }).catch(() => process.exit(1))
+        - wget
+        - --quiet
+        - --tries=1
+        - --spider
+        - http://localhost:8080/health
       interval: 5s
       timeout: 3s
       retries: 12

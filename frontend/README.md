@@ -18,6 +18,18 @@ npm install
 npm run dev
 ```
 
+## Docker
+
+The repository `docker-compose.yml` builds this app as a production static
+bundle served by Nginx:
+
+```bash
+docker compose --profile app up --build frontend
+```
+
+The container listens on port `8080`; compose publishes it at
+`http://localhost:5173`.
+
 ## Environment
 
 Copy `frontend/.env.example` to `frontend/.env.local` for local frontend settings.
