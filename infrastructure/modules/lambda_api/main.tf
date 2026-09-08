@@ -1,3 +1,6 @@
+# The placeholder lives at backend/main.py so it and the real deployment share one
+# handler path. deploy-app.yml ships the repo layout because backend/main.py resolves
+# agents/, config.py and datasets/ relative to its own parent directory.
 data "archive_file" "bootstrap" {
   type        = "zip"
   output_path = "${path.module}/bootstrap.zip"
@@ -19,9 +22,6 @@ data "archive_file" "bootstrap" {
               })
           }
     EOT
-    # Placed at backend/main.py so the placeholder and the real deployment share one
-    # handler path. deploy-app.yml ships the repo layout because backend/main.py
-    # resolves agents/, config.py and datasets/ relative to its own parent directory.
     filename = "backend/main.py"
   }
 }
