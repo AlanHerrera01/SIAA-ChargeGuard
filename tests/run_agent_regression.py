@@ -1,11 +1,13 @@
 import json
+import sys
 from pathlib import Path
-
-from agents.orchestrator import run_chargeguard_case
-
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 GROUND_TRUTH_PATH = PROJECT_ROOT / "datasets" / "ground_truth.json"
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from agents.orchestrator import run_chargeguard_case
 
 
 def load_cases():

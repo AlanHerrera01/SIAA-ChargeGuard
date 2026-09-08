@@ -8,13 +8,18 @@ Integrates with orchestrator to handle charge analysis and dispute workflow.
 import os
 import sys
 import json
+import logging
+from datetime import datetime
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 import httpx
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # Add project root to path for imports
 project_root = str(Path(__file__).parent.parent)
@@ -23,6 +28,9 @@ if project_root not in sys.path:
 
 
 from agents.orchestrator import run_chargeguard_case
+
+
+logger = logging.getLogger(__name__)
 
 
 # Initialize FastAPI app
@@ -52,10 +60,51 @@ class CaseDecisionRequest(BaseModel):
     decision: str  # "accept_offer" or "reject_and_request_full_refund"
 
 
-class TransactionWebhookRequest(BaseModel):
-    """Event sent by the mock bank when a transaction is posted."""
-    transaction_id: str
-    event_type: str = "transaction.posted"
+class BankTransaction(BaseModel):
+    """Canonical transaction embedded in a Mock Bank event."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    transaction_id: str = Field(pattern=r"^txn_.+")
+    user_id: str
+    subscription_id: str
+    merchant_id: str
+    merchant_name: str
+    amount_usd: float = Field(gt=0, allow_inf_nan=False)
+    currency: Literal["USD"]
+    posted_at: str
+    description: str
+    status: Literal["posted"]
+    invoice_key: str
+
+    @field_validator("posted_at")
+    @classmethod
+    def validate_posted_at(cls, value: str) -> str:
+        validate_utc_timestamp(value, "posted_at")
+        return value
+
+
+class TransactionPostedEvent(BaseModel):
+    """Envelope sent by Mock Bank for a posted transaction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str = Field(pattern=r"^evt_.+")
+    event_type: Literal["transaction.posted"]
+    occurred_at: str
+    data: BankTransaction
+
+    @field_validator("occurred_at")
+    @classmethod
+    def validate_occurred_at(cls, value: str) -> str:
+        validate_utc_timestamp(value, "occurred_at")
+        return value
+
+    @model_validator(mode="after")
+    def validate_event_clock(self):
+        if self.occurred_at != self.data.posted_at:
+            raise ValueError("occurred_at must match data.posted_at")
+        return self
 
 
 class DecisionResolutionRequest(BaseModel):
@@ -70,7 +119,44 @@ SUBSCRIPTIONS = None
 MERCHANTS = None
 CASES: dict[str, dict] = {}
 PENDING_DECISIONS: dict[str, dict] = {}
+EVENTS: dict[str, dict] = {}
 MERCHANT_API_URL = os.getenv("MERCHANT_API_URL", "http://127.0.0.1:8002")
+
+
+class APIError(Exception):
+    def __init__(self, status_code: int, code: str, message: str):
+        self.status_code = status_code
+        self.code = code
+        self.message = message
+
+
+def validate_utc_timestamp(value: str, field_name: str) -> None:
+    if not value.endswith("Z") or "T" not in value:
+        raise ValueError(f"{field_name} must be an ISO-8601 UTC timestamp ending in Z")
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a valid ISO-8601 timestamp") from exc
+
+
+def error_body(code: str, message: str) -> dict:
+    return {"error": {"code": code, "message": message}}
+
+
+@app.exception_handler(APIError)
+async def api_error_handler(_request: Request, exc: APIError):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_body(exc.code, exc.message),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(_request: Request, _exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content=error_body("validation_error", "Request validation failed"),
+    )
 
 
 def load_datasets():
@@ -124,6 +210,45 @@ def transaction_exists(transaction_id: str) -> bool:
     )
 
 
+def find_transaction(transaction_id: str) -> dict | None:
+    return next(
+        (
+            transaction
+            for transaction in dataset_items(TRANSACTIONS)
+            if transaction.get("transaction_id", transaction.get("id"))
+            == transaction_id
+        ),
+        None,
+    )
+
+
+def validate_webhook_transaction(received: BankTransaction) -> None:
+    canonical = find_transaction(received.transaction_id)
+    if canonical is None:
+        raise APIError(404, "transaction_not_found", "Transaction not found")
+
+    critical_fields = (
+        "transaction_id",
+        "user_id",
+        "subscription_id",
+        "merchant_id",
+        "amount_usd",
+        "currency",
+        "posted_at",
+    )
+    received_data = received.model_dump(mode="json")
+    if any(received_data[field] != canonical.get(field) for field in critical_fields):
+        raise APIError(
+            409,
+            "transaction_payload_mismatch",
+            "Webhook transaction does not match the canonical transaction",
+        )
+
+
+def public_event(event: dict) -> dict:
+    return {key: value for key, value in event.items() if key != "payload"}
+
+
 def serialize_case(transaction_id: str, result: dict) -> dict:
     """Store one consistent case shape for all API consumers."""
     dispute = to_dict(result.get("dispute")) if result.get("dispute") else None
@@ -160,6 +285,34 @@ def serialize_case(transaction_id: str, result: dict) -> dict:
             "offer": merchant_response.get("offer"),
         }
     return case
+
+
+def process_transaction(transaction_id: str) -> dict:
+    """Run the synchronous agent workflow and persist its API representation."""
+    result = run_chargeguard_case(transaction_id)
+    return serialize_case(transaction_id, result)
+
+
+def process_event(event_id: str) -> None:
+    """Process an accepted bank event in FastAPI's background thread pool."""
+    event = EVENTS.get(event_id)
+    if event is None:
+        return
+
+    event["status"] = "processing"
+    try:
+        case = process_transaction(event["transaction_id"])
+    except Exception:
+        logger.exception("Failed to process bank event %s", event_id)
+        event["status"] = "failed"
+        event["error"] = error_body(
+            "case_processing_failed",
+            "Transaction analysis could not be completed",
+        )["error"]
+        return
+
+    event["status"] = "completed"
+    event["case_id"] = case["case_id"]
 
 
 def require_case(case_id: str) -> dict:
@@ -273,8 +426,7 @@ async def analyze_case(request: CaseAnalysisRequest):
             )
 
         # Run the orchestrator (blocks until merchant decision)
-        result = run_chargeguard_case(transaction_id)
-        return serialize_case(transaction_id, result)
+        return process_transaction(transaction_id)
     
     except HTTPException:
         raise
@@ -284,26 +436,67 @@ async def analyze_case(request: CaseAnalysisRequest):
         raise HTTPException(status_code=500, detail=f"Case analysis failed: {str(e)}")
 
 
-@app.post("/transactions/webhook")
+@app.post("/transactions/webhook", status_code=202)
 async def transaction_webhook(
-    request: TransactionWebhookRequest,
+    request: TransactionPostedEvent,
     background_tasks: BackgroundTasks,
 ):
     """Receive a bank event and start analysis in the background."""
-    if not transaction_exists(request.transaction_id):
-        raise HTTPException(
-            status_code=404,
-            detail=f"Transaction {request.transaction_id} not found",
-        )
+    validate_webhook_transaction(request.data)
+    payload = request.model_dump(mode="json")
 
-    background_tasks.add_task(analyze_case, CaseAnalysisRequest(
-        transaction_id=request.transaction_id,
-    ))
+    existing = EVENTS.get(request.event_id)
+    if existing is not None:
+        if existing["payload"] != payload:
+            raise APIError(
+                409,
+                "event_payload_conflict",
+                "Event ID was previously received with different data",
+            )
+        return {
+            "status": existing["status"],
+            "event_id": request.event_id,
+            "transaction_id": request.data.transaction_id,
+            "duplicate": True,
+        }
+
+    EVENTS[request.event_id] = {
+        "event_id": request.event_id,
+        "event_type": request.event_type,
+        "occurred_at": request.occurred_at,
+        "transaction_id": request.data.transaction_id,
+        "status": "accepted",
+        "case_id": None,
+        "error": None,
+        "payload": payload,
+    }
+    background_tasks.add_task(process_event, request.event_id)
     return {
         "status": "accepted",
+        "event_id": request.event_id,
         "event_type": request.event_type,
-        "transaction_id": request.transaction_id,
+        "transaction_id": request.data.transaction_id,
+        "duplicate": False,
     }
+
+
+@app.get("/events")
+async def list_events():
+    """List bank events received during the current backend process."""
+    return [public_event(event) for event in EVENTS.values()]
+
+
+@app.get("/events/{event_id}")
+async def get_event(event_id: str):
+    """Return the processing state of an accepted bank event."""
+    event = EVENTS.get(event_id)
+    if event is None:
+        raise APIError(
+            404,
+            "event_not_found",
+            "Event not found",
+        )
+    return public_event(event)
 
 
 @app.get("/cases")
@@ -402,13 +595,14 @@ async def submit_case_decision(case_id: str, request: CaseDecisionRequest):
 
 @app.post("/demo/reset")
 async def reset_demo():
-    """Clear in-memory cases and reload the synthetic datasets."""
+    """Clear in-memory workflow state and reload the synthetic datasets."""
     CASES.clear()
     PENDING_DECISIONS.clear()
+    EVENTS.clear()
     load_datasets()
     return {
         "status": "ok",
-        "message": "Backend cases and pending decisions cleared",
+        "message": "Backend events, cases and pending decisions cleared",
     }
 
 
@@ -433,6 +627,8 @@ async def root():
             "health": "/health",
             "analyze_case": "POST /cases/analyze",
             "webhook": "POST /transactions/webhook",
+            "events": "GET /events",
+            "event_status": "GET /events/{event_id}",
             "cases": "GET /cases",
             "pending_decisions": "GET /decisions/pending",
             "resolve_decision": "POST /decisions/{case_id}/resolve",
