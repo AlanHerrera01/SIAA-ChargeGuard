@@ -183,16 +183,22 @@ For step-by-step AWS provisioning and teardown instructions, see [`docs/deployme
 ### Public Demo Access
 Judges can interact directly with the live system without creating an account:
 - **Application URL**: [https://main.d24otvpswldjmf.amplifyapp.com](https://main.d24otvpswldjmf.amplifyapp.com)
-- **Demo User ID**: `usr_demo` (pre-seeded with active subscriptions: Netflix, Spotify, AWS, GitHub, Gym)
+- **Demo User ID**: `usr_demo` (pre-seeded with real subscriptions: Netflix Standard $15.49, Dropbox Plus $11.99, Spotify Premium $10.99, Notion Plus $12.00, FitLife Gym Monthly Access $39.99 [canceled], and SafeVault Personal $2.99)
 - **Data Source**: Live Cloud API (`VITE_CHARGEGUARD_DATA_SOURCE=api`)
 
 ### Running the Live Demo
 1. Open the [Amplify Dashboard](https://main.d24otvpswldjmf.amplifyapp.com).
 2. Observe active subscriptions and total recovered balance in the metric cards.
-3. Go to **Subscriptions**, locate **Spotify Premium** ($10.99/mo), and click **"Simular Incremento"** (or trigger the duplicate transaction via `POST /mock/bank/transactions/notify`).
-4. Watch the autonomous agent detect the anomaly, gather invoice evidence from S3, draft the dispute, and submit it to the Spotify mock merchant.
+3. **Trigger the Duplicate Charge Anomaly**: Send the synthetic bank webhook for transaction `txn_0035` (Spotify duplicate charge of $10.99 charged 8 minutes after `txn_0034`):
+   ```bash
+   curl -X POST https://6zx34nx8v7.execute-api.us-east-1.amazonaws.com/mock/bank/transactions/notify \
+     -H "Content-Type: application/json" \
+     -d '{"transaction_id": "txn_0035"}'
+   ```
+   *(Note: The UI button "Simular aumento (+ $5.00)" simulates price hike anomalies, such as on Netflix `sub_001`)*.
+4. Watch the autonomous agent detect the anomaly (`DUPLICATE_CHARGE`, 98% confidence), gather invoice evidence (`inv_0034.pdf` and `inv_0035.pdf`) from S3, draft the dispute, and submit it to the Spotify mock merchant.
 5. **The Climax**: The merchant responds with a partial courtesy credit of **$6.59**. The agent pauses and displays the **Decision Card** ("Acción Requerida").
-6. Click **"Aceptar Oferta"** to settle the claim. Observe the case close as `resolved`, with the recovered amount updated to `$49.09`.
+6. Click **"Aceptar Oferta"** to settle the claim. Observe the case close as `resolved`, with the recovered amount updated in real time.
 
 To reset the demo environment back to baseline:
 ```bash
