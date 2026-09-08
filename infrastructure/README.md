@@ -52,18 +52,9 @@ infrastructure/
    - El rol OIDC de GitHub Actions (`chargeguard-github-actions-role`) **no** utiliza `AdministratorAccess`. Sus políticas están acotadas por prefijos de recurso (`chargeguard-*`) para DynamoDB, S3, Lambda, API Gateway, EventBridge, CloudWatch Logs y Amplify.
    - La condición de confianza OIDC está restringida estrictamente a `repo:AlanHerrera01/SIAA-ChargeGuard:*` (con doble A) con audiencia `sts.amazonaws.com`.
 
-4. **Variables Obligatorias y Token de GitHub para Amplify:**
+4. **Variables Obligatorias y Despliegue de Frontend (AWS Amplify):**
    - `github_repo`: Es una variable obligatoria sin valor por defecto (`AlanHerrera01/SIAA-ChargeGuard`).
-   - `github_access_token`: Es una variable sensible y obligatoria necesaria para que AWS Amplify establezca el webhook y obtenga el código fuente del repositorio.
-   - **Cómo generar el token:**
-     1. En GitHub, ir a **Settings > Developer Settings > Personal access tokens > Tokens (classic)**.
-     2. Crear un token con el scope `repo` (Full control of private repositories) o `admin:repo_hook`.
-     3. Configurar en `terraform.tfvars`:
-        ```hcl
-        github_repo         = "AlanHerrera01/SIAA-ChargeGuard"
-        github_access_token = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-        ```
-        O exportar como variable de entorno: `export TF_VAR_github_access_token="ghp_..."`.
+   - El frontend de AWS Amplify se despliega de manera desacoplada mediante `scripts/deploy_amplify.py`, utilizando las APIs nativas de despliegue por artefacto (`aws amplify create-deployment` y `start-deployment`). Esto elimina la necesidad de tokens personales de acceso (PAT) o credenciales adicionales de GitHub en la infraestructura de Terraform.
 
 ---
 
@@ -72,7 +63,6 @@ infrastructure/
 ### Requisitos previos
 - Terraform `>= 1.5.0, < 2.0.0`.
 - AWS CLI v2 autenticado contra la cuenta AWS del proyecto (`aws sts get-caller-identity`).
-- GitHub Personal Access Token con permisos sobre `AlanHerrera01/SIAA-ChargeGuard`.
 
 ### Paso 1: Aprovisionar el Bootstrap (Solo una vez)
 

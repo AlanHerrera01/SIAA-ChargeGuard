@@ -9,6 +9,7 @@ import { Subscriptions } from "@/pages/Subscriptions";
 import type { ActivityLog, Case, CaseViewModel, Metrics, SubscriptionViewModel } from "@/types/chargeguard";
 
 type AppRoutesProps = {
+  activeCaseId?: string | null;
   metrics: Metrics;
   subscriptions: SubscriptionViewModel[];
   caseViewModels: CaseViewModel[];
@@ -25,6 +26,7 @@ function WithRouteLoading({ children }: { children: React.ReactNode }) {
 }
 
 export function AppRoutes({
+  activeCaseId,
   metrics,
   subscriptions,
   caseViewModels,
@@ -36,7 +38,7 @@ export function AppRoutes({
 }: AppRoutesProps) {
   return (
     <Routes>
-      <Route element={<AppLayout />}>
+      <Route element={<AppLayout activeCaseId={activeCaseId} />}>
         <Route
           index
           element={
@@ -50,6 +52,14 @@ export function AppRoutes({
           element={
             <WithRouteLoading>
               {isLoadingData ? <LoadingView /> : <Subscriptions onSimulateIncrease={onSimulateIncrease} subscriptions={subscriptions} />}
+            </WithRouteLoading>
+          }
+        />
+        <Route
+          path="/disputes"
+          element={
+            <WithRouteLoading>
+              <DisputeDetail caseViewModels={caseViewModels} onDecisionResolved={onDecisionResolved} />
             </WithRouteLoading>
           }
         />

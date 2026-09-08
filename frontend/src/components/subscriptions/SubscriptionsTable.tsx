@@ -2,7 +2,6 @@ import { ArrowRight, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { env } from "@/config/env";
 import { useLanguage } from "@/i18n/LanguageContext";
 import type { SubscriptionViewModel } from "@/types/chargeguard";
 import { StatusBadge } from "./StatusBadge";
@@ -55,7 +54,7 @@ export function SubscriptionsTable({ subscriptions, onSimulateIncrease }: Subscr
               <div className="flex justify-end gap-2">
                 {subscription.status === "in_dispute" || subscription.status === "anomaly_detected" ? (
                   <Button asChild size="sm" variant="ghost">
-                    <Link to={`/disputes/${subscription.case_id ?? env.defaultCaseId}`}>
+                    <Link to={subscription.case_id ? `/disputes/${subscription.case_id}` : "/disputes"}>
                       <ArrowRight />
                       {t.subscriptions.viewDispute}
                     </Link>

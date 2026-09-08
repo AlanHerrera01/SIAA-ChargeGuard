@@ -14,5 +14,4 @@ export const env = {
   mockBankApiUrl: readUrl(import.meta.env.VITE_MOCK_BANK_API_URL, "http://localhost:8001"),
   mockMerchantApiUrl: readUrl(import.meta.env.VITE_MOCK_MERCHANT_API_URL, "http://localhost:8002"),
   demoUserId: import.meta.env.VITE_DEMO_USER_ID ?? "usr_demo",
-  defaultCaseId: import.meta.env.VITE_DEFAULT_CASE_ID ?? "case_spotify_001",
 } as const;

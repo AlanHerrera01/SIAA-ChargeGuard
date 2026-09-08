@@ -9,16 +9,16 @@ Este directorio define los flujos automatizados de Integración Continua y Despl
 | Workflow | Disparador | Condición de ejecución | Acción |
 |---|---|---|---|
 | **`ci.yml`** | `pull_request` contra `main` | Cada PR hacia `main` (usa `paths-filter` por job) | • `lint-test-python`: ruff + pytest en datasets, mocks y scripts.<br>• `terraform`: fmt check + validate en bootstrap e infraestructura.<br>• `frontend`: npm ci + build (skip limpio si no existe `package.json`). |
-| **`deploy-infra.yml`** | `push` a `main` | Cambios en `infrastructure/**` | Job único `deploy` gateado por el environment **`production`** (required reviewer). Valida `backend.hcl` y `AMPLIFY_GITHUB_TOKEN`, asume el rol OIDC, corre `terraform plan` y `terraform apply` en el runner efímero sin subir artefactos de plan públicos. |
-| **`deploy-app.yml`** | `push` a `main` | Cambios en `backend/**`, `agents/**` o `frontend/**` | Empaqueta y despliega el código en la Lambda `chargeguard-backend` y dispara la release en AWS Amplify Hosting vía `aws amplify start-job`. |
+| **`deploy-infra.yml`** | `push` a `main` | Cambios en `infrastructure/**` | Job único `deploy` gateado por el environment **`production`** (required reviewer). Valida `backend.hcl`, asume el rol OIDC, corre `terraform plan` y `terraform apply` en el runner efímero sin subir artefactos de plan públicos. |
+| **`deploy-app.yml`** | `push` a `main` | Cambios en `backend/**`, `agents/**` o `frontend/**` | Empaqueta y despliega el código en la Lambda `chargeguard-backend` y dispara la release en AWS Amplify Hosting vía `scripts/deploy_amplify.py`. |
 
 ### Optimizaciones y Reglas de Seguridad
 - **Permissions mínimas por workflow**:
   - `ci.yml`: Únicamente `contents: read` (no interactúa con AWS ni genera tokens de identidad).
   - `deploy-infra.yml` y `deploy-app.yml`: `id-token: write` (para intercambio STS OIDC) y `contents: read`.
 - **CERO secretos de AWS**: El ARN del rol IAM se almacena como variable de repositorio (`vars.AWS_ROLE_ARN`).
-- **Sin artefactos de plan expuestos**: `deploy-infra.yml` ejecuta `plan` y `apply` en el mismo job sobre el runner efímero. No se utiliza `upload-artifact` para el archivo `tfplan`, previniendo la exposición pública de variables sensibles (como tokens de acceso) en repositorios públicos.
-- **Fail-fast estricto**: `deploy-infra.yml` falla inmediatamente con error explícito si `infrastructure/backend.hcl` o el secreto `AMPLIFY_GITHUB_TOKEN` no están presentes, impidiendo degradaciones silenciosas o states locales descartados.
+- **Sin artefactos de plan expuestos**: `deploy-infra.yml` ejecuta `plan` y `apply` en el mismo job sobre el runner efímero. No se utiliza `upload-artifact` para el archivo `tfplan`, previniendo la exposición pública de variables en repositorios públicos.
+- **Fail-fast estricto**: `deploy-infra.yml` falla inmediatamente con error explícito si `infrastructure/backend.hcl` no está presente, impidiendo degradaciones silenciosas o states locales descartados.
 - **Concurrencia**:
   - `ci.yml`: `group: ci-${{ github.ref }}`, `cancel-in-progress: true` (cancela runs obsoletos al hacer push a la misma rama).
   - `deploy-infra.yml`: `group: deploy-infra`, `cancel-in-progress: false` (evita que dos merges concurrentes pisen un apply en curso).
@@ -37,12 +37,12 @@ Este directorio define los flujos automatizados de Integración Continua y Despl
 > **Flujo de Bootstrap inicial**:
 > 1. Aplicar `infrastructure/bootstrap/` localmente para crear el bucket S3 de estado remoto y la tabla DynamoDB de locks.
 > 2. Crear `infrastructure/backend.hcl` apuntando al bucket y tabla creados.
-> 3. Ejecutar el primer `terraform init` y `terraform apply` desde la máquina local proporcionando `github_repo` y `github_access_token`.
+> 3. Ejecutar el primer `terraform init` y `terraform apply` desde la máquina local proporcionando `github_repo`.
 > 4. Una vez creado el stack en AWS (incluyendo el rol OIDC y su trust policy), configurar las variables en GitHub y habilitar a CI/CD para que tome el relevo de los despliegues posteriores.
 
 ---
 
-## 3. Configuración de Variables y Secretos en GitHub
+## 3. Configuración de Variables en GitHub
 
 ### Variables de Repositorio (vars, no secrets)
 
@@ -59,14 +59,9 @@ gh variable set AWS_REGION --body "us-east-1"
 gh variable set AMPLIFY_APP_ID --body "<AMPLIFY_APP_ID>"
 ```
 
-### Secretos de Repositorio (Secrets)
+### Cero Secretos Permanentes Requeridos
 
-Configure el Personal Access Token de GitHub en **Settings > Secrets and variables > Actions > Secrets**:
-
-```bash
-# Token clásico de GitHub con scopes repo y admin:repo_hook
-gh secret set AMPLIFY_GITHUB_TOKEN --body "ghp_xxxxxxxxxxxxxxxxxxxx"
-```
+Gracias a la autenticación mediante **AWS IAM OIDC** y al despliegue desacoplado del frontend en Amplify por artefactos (`deploy_amplify.py`), **no se requieren secretos ni tokens personales de GitHub (`AMPLIFY_GITHUB_TOKEN`)** en los flujos de CI/CD.
 
 ---
 

@@ -27,7 +27,13 @@ export function DisputeDetail({ caseViewModels, onDecisionResolved }: DisputeDet
   const { isPending, run } = useDelayedAction(400);
   const { t } = useLanguage();
 
-  const caseView = useMemo(() => caseViewModels.find((item) => item.caseData.case_id === id), [caseViewModels, id]);
+  const caseView = useMemo(() => {
+    if (id) {
+      const found = caseViewModels.find((item) => item.caseData.case_id === id);
+      if (found) return found;
+    }
+    return caseViewModels[0] ?? null;
+  }, [caseViewModels, id]);
 
   if (!caseView) {
     return (

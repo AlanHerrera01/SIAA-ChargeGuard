@@ -19,7 +19,7 @@ function App() {
   const [simulatedAnomalySubscriptionIds, setSimulatedAnomalySubscriptionIds] = useState<string[]>([]);
   const [simulationDialogOpen, setSimulationDialogOpen] = useState(false);
   const [simulatedSubscriptionId, setSimulatedSubscriptionId] = useState<string | null>(null);
-  const [generatedCaseId, setGeneratedCaseId] = useState(env.defaultCaseId);
+  const [generatedCaseId, setGeneratedCaseId] = useState<string | null>(null);
   const { t } = useLanguage();
 
   const loadBackendData = useCallback(async () => {
@@ -38,6 +38,9 @@ function App() {
       const cases = await Promise.all(caseList.items.map((caseSummary) => backendApi.getCase(caseSummary.case_id)));
 
       setData(adaptBackendData({ merchants, subscriptions, transactions, cases }));
+      if (cases.length > 0) {
+        setGeneratedCaseId((current) => current ?? cases[0].case_id);
+      }
     } catch (error) {
       setApiError(error instanceof Error ? error.message : "Backend request failed");
       setData(chargeguardData);
@@ -57,6 +60,10 @@ function App() {
     [data, simulatedAnomalySubscriptionIds],
   );
   const metrics = useMemo(() => getRuntimeMetrics(data.metrics, subscriptions, activeCases), [activeCases, data.metrics, subscriptions]);
+
+  const primaryCaseId = useMemo(() => {
+    return generatedCaseId ?? caseViewModels[0]?.caseData.case_id ?? data.cases[0]?.case_id ?? null;
+  }, [generatedCaseId, caseViewModels, data.cases]);
 
   async function handleSimulateIncrease(id: string) {
     setSimulatedAnomalySubscriptionIds((currentIds) => (currentIds.includes(id) ? currentIds : [...currentIds, id]));
@@ -83,7 +90,11 @@ function App() {
 
   function handleOpenGeneratedCase() {
     setSimulationDialogOpen(false);
-    navigate(`/disputes/${generatedCaseId}`);
+    if (primaryCaseId) {
+      navigate(`/disputes/${primaryCaseId}`);
+    } else {
+      navigate("/disputes");
+    }
   }
 
   const simulatedSubscription = subscriptions.find((subscription) => subscription.subscription_id === simulatedSubscriptionId);
@@ -91,6 +102,7 @@ function App() {
   return (
     <>
       <AppRoutes
+        activeCaseId={primaryCaseId}
         activeCases={activeCases}
         activity={apiError ? [{ id: "api_error", message: apiError, timestamp: new Date().toISOString() }, ...data.activity] : data.activity}
         caseViewModels={caseViewModels}

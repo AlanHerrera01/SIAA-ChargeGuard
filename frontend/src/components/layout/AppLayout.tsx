@@ -22,12 +22,17 @@ function StatusBadge() {
   );
 }
 
-function NavTabs({ onNavigate }: { onNavigate?: () => void }) {
+type AppLayoutProps = {
+  activeCaseId?: string | null;
+};
+
+function NavTabs({ activeCaseId, onNavigate }: { activeCaseId?: string | null; onNavigate?: () => void }) {
   const { t } = useLanguage();
+  const timelineHref = activeCaseId ? `/disputes/${activeCaseId}` : "/disputes";
   const navItems = [
     { label: t.nav.dashboard, href: "/", icon: Bot },
     { label: t.nav.subscriptions, href: "/subscriptions", icon: ShieldCheck },
-    { label: t.nav.timeline, href: `/disputes/${env.defaultCaseId}`, icon: AlertTriangle },
+    { label: t.nav.timeline, href: timelineHref, icon: AlertTriangle },
   ];
 
   return (
@@ -53,7 +58,7 @@ function NavTabs({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-export function AppLayout() {
+export function AppLayout({ activeCaseId }: AppLayoutProps = {}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { t } = useLanguage();
 
@@ -79,7 +84,7 @@ export function AppLayout() {
           </div>
 
           <div className="hidden items-center gap-4 lg:flex">
-            <NavTabs />
+            <NavTabs activeCaseId={activeCaseId} />
             <div className="flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2">
               <CheckCircle2 className="size-4 text-emerald-600" />
               <span className="text-sm font-semibold text-emerald-700">{t.app.recovered}: $42.50</span>
@@ -102,7 +107,7 @@ export function AppLayout() {
         {menuOpen ? (
           <div className="border-t border-slate-200 bg-white px-4 py-4 lg:hidden">
             <div className="mx-auto max-w-7xl space-y-4">
-              <NavTabs onNavigate={() => setMenuOpen(false)} />
+              <NavTabs activeCaseId={activeCaseId} onNavigate={() => setMenuOpen(false)} />
               <div className="flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2">
                 <CheckCircle2 className="size-4 text-emerald-600" />
                 <span className="text-sm font-semibold text-emerald-700">{t.app.recovered}: $42.50</span>
