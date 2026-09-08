@@ -315,6 +315,7 @@ def build_transactions(
         ),
         key=lambda record: record["posted_at"],
     )
+    spotify_latest["_marker"] = "duplicate_original"
     duplicate = dict(spotify_latest)
     duplicate["_marker"] = "duplicate_charge"
     duplicate["posted_at"] = _posted_at(
@@ -375,8 +376,9 @@ def build_ground_truth(marker_ids: dict[str, str]) -> dict[str, list[dict[str, A
                 "anomaly_id": "anm_002",
                 "type": "duplicate_charge",
                 "transaction_id": marker_ids["duplicate_charge"],
+                "previous_transaction_id": marker_ids["duplicate_original"],
                 "subscription_id": "sub_003",
-                "expected_amount_usd": 0.00,
+                "expected_amount_usd": 10.99,
                 "actual_amount_usd": 10.99,
                 "delta_usd": 10.99,
                 "expected_claim_amount_usd": 10.99,
