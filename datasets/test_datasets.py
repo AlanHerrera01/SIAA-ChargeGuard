@@ -177,7 +177,9 @@ def test_exact_anomaly_scenarios_and_evidence() -> None:
     assert previous_duplicate_transaction in same_charge
     assert duplicate_transaction in same_charge
     assert duplicate["previous_transaction_id"] == "txn_0034"
-    assert duplicate["expected_amount_usd"] == previous_duplicate_transaction["amount_usd"]
+    assert (
+        duplicate["expected_amount_usd"] == previous_duplicate_transaction["amount_usd"]
+    )
     assert duplicate["expected_claim_amount_usd"] == duplicate_transaction["amount_usd"]
 
     cancelled = anomalies["anm_003"]
