@@ -86,11 +86,14 @@ services:
   backend:
     profiles: [app]
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     <<: *service-defaults
     ports:
       - "8000:8000"
     env_file: *default-env-file
+    environment:
+      MERCHANT_API_URL: http://mock-merchant:8002
     depends_on:
       localstack:
         condition: service_healthy

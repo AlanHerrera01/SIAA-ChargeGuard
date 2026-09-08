@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import logging
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -120,7 +121,16 @@ MERCHANTS = None
 CASES: dict[str, dict] = {}
 PENDING_DECISIONS: dict[str, dict] = {}
 EVENTS: dict[str, dict] = {}
-MERCHANT_API_URL = os.getenv("MERCHANT_API_URL", "http://127.0.0.1:8002")
+TERMINAL_MERCHANT_STATUSES = {
+    "resolved_accepted",
+    "resolved_full",
+    "denied",
+}
+REJECTION_TERMINAL_STATUSES = {"resolved_full", "denied"}
+MERCHANT_POLL_MAX_ATTEMPTS = int(os.getenv("MERCHANT_POLL_MAX_ATTEMPTS", "10"))
+MERCHANT_POLL_INTERVAL_SECONDS = float(
+    os.getenv("MERCHANT_POLL_INTERVAL_SECONDS", "1")
+)
 
 
 class APIError(Exception):
@@ -141,6 +151,15 @@ def validate_utc_timestamp(value: str, field_name: str) -> None:
 
 def error_body(code: str, message: str) -> dict:
     return {"error": {"code": code, "message": message}}
+
+
+def merchant_api_url() -> str:
+    """Resolve the merchant API URL, preserving the old variable temporarily."""
+    return (
+        os.getenv("MERCHANT_API_URL")
+        or os.getenv("MOCK_MERCHANT_URL")
+        or "http://127.0.0.1:8002"
+    ).rstrip("/")
 
 
 @app.exception_handler(APIError)
@@ -524,6 +543,85 @@ async def list_pending_decisions():
     return list(PENDING_DECISIONS.values())
 
 
+async def merchant_request(
+    method: str,
+    path: str,
+    payload: dict | None = None,
+) -> dict:
+    """Send one bounded request to Mock Merchant and normalize failures."""
+    transport = getattr(app.state, "merchant_transport", None)
+    try:
+        async with httpx.AsyncClient(timeout=10.0, transport=transport) as client:
+            response = await client.request(
+                method,
+                f"{merchant_api_url()}{path}",
+                json=payload,
+            )
+            response.raise_for_status()
+            result = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Merchant request failed: %s %s", method, path)
+        raise APIError(
+            502,
+            "merchant_service_unavailable",
+            "Merchant service is unavailable",
+        ) from exc
+
+    if not isinstance(result, dict) or not isinstance(result.get("status"), str):
+        raise APIError(
+            502,
+            "invalid_merchant_response",
+            "Merchant returned an invalid response",
+        )
+    return result
+
+
+async def wait_for_merchant_resolution(
+    dispute_id: str,
+    max_attempts: int | None = None,
+    interval_seconds: float | None = None,
+) -> dict | None:
+    """Poll an escalated dispute until it becomes terminal or times out."""
+    attempts = max_attempts or MERCHANT_POLL_MAX_ATTEMPTS
+    interval = (
+        MERCHANT_POLL_INTERVAL_SECONDS
+        if interval_seconds is None
+        else interval_seconds
+    )
+    for attempt in range(attempts):
+        response = await merchant_request("GET", f"/disputes/{dispute_id}")
+        status = response["status"]
+        if status in REJECTION_TERMINAL_STATUSES:
+            return response
+        if status != "escalated":
+            raise APIError(
+                502,
+                "unexpected_merchant_status",
+                "Merchant returned an unexpected dispute status",
+            )
+        if attempt + 1 < attempts:
+            await asyncio.sleep(interval)
+    return None
+
+
+def record_user_decision(
+    case: dict,
+    request: DecisionResolutionRequest,
+    merchant_response: dict,
+) -> None:
+    negotiation = to_dict(case.get("negotiation")) or {}
+    negotiation.update(
+        {
+            "user_decision": request.decision,
+            "reason": request.reason,
+            "resolution": merchant_response.get("resolution"),
+        }
+    )
+    case["negotiation"] = negotiation
+    case["merchant_response"] = merchant_response
+    PENDING_DECISIONS.pop(case["case_id"], None)
+
+
 async def resolve_merchant_decision(
     case: dict,
     request: DecisionResolutionRequest,
@@ -532,11 +630,11 @@ async def resolve_merchant_decision(
         "accept_offer",
         "reject_and_request_full_refund",
     }:
-        raise HTTPException(status_code=400, detail="Unsupported decision")
+        raise APIError(400, "unsupported_decision", "Unsupported decision")
 
     dispute_id = case.get("dispute_id")
     if not dispute_id:
-        raise HTTPException(status_code=409, detail="Case has no merchant dispute")
+        raise APIError(409, "missing_dispute", "Case has no merchant dispute")
 
     endpoint = "accept"
     payload = None
@@ -544,28 +642,44 @@ async def resolve_merchant_decision(
         endpoint = "reject"
         payload = {"reason": request.reason or "User requested full refund"}
 
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                f"{MERCHANT_API_URL}/disputes/{dispute_id}/{endpoint}",
-                json=payload,
-            )
-            response.raise_for_status()
-            merchant_response = response.json()
-    except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Merchant service unavailable: {exc}",
-        ) from exc
+    merchant_response = await merchant_request(
+        "POST",
+        f"/disputes/{dispute_id}/{endpoint}",
+        payload,
+    )
+    status = merchant_response["status"]
+    if request.decision == "accept_offer" and status != "resolved_accepted":
+        raise APIError(
+            502,
+            "unexpected_merchant_status",
+            "Merchant returned an unexpected dispute status",
+        )
+    if (
+        request.decision == "reject_and_request_full_refund"
+        and status not in REJECTION_TERMINAL_STATUSES | {"escalated"}
+    ):
+        raise APIError(
+            502,
+            "unexpected_merchant_status",
+            "Merchant returned an unexpected dispute status",
+        )
 
-    case["merchant_response"] = merchant_response
+    record_user_decision(case, request, merchant_response)
+
+    if status in TERMINAL_MERCHANT_STATUSES:
+        case["status"] = "completed"
+        return case
+
+    case["status"] = "awaiting_merchant"
+    final_response = await wait_for_merchant_resolution(dispute_id)
+    if final_response is None:
+        case["negotiation"]["polling_timed_out"] = True
+        return case
+
+    case["merchant_response"] = final_response
+    case["negotiation"]["resolution"] = final_response.get("resolution")
+    case["negotiation"]["polling_timed_out"] = False
     case["status"] = "completed"
-    case["negotiation"] = {
-        "user_decision": request.decision,
-        "reason": request.reason,
-        "resolution": merchant_response.get("resolution"),
-    }
-    PENDING_DECISIONS.pop(case["case_id"], None)
     return case
 
 

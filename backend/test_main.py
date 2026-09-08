@@ -219,6 +219,17 @@ def load_mock_bank_module():
     return module
 
 
+def load_mock_merchant_module():
+    path = PROJECT_ROOT / "mock-services" / "merchant" / "api.py"
+    spec = importlib.util.spec_from_file_location(
+        "chargeguard_merchant_integration", path
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 async def test_mock_bank_delivers_real_envelope_to_backend(monkeypatch):
     calls = []
 
@@ -256,3 +267,253 @@ async def test_mock_bank_delivers_real_envelope_to_backend(monkeypatch):
     assert event["event_type"] == "transaction.posted"
     assert event["transaction_id"] == "txn_0031"
     assert event["status"] == "completed"
+
+
+def pending_case():
+    case = {
+        "case_id": "case_decision_test",
+        "transaction_id": "txn_0031",
+        "dispute_id": "dsp_decision_test",
+        "status": "awaiting_human",
+        "merchant_response": {"status": "counter_offer"},
+        "negotiation": {"recommendation": "reject_and_request_full_refund"},
+    }
+    backend.CASES[case["case_id"]] = case
+    backend.PENDING_DECISIONS[case["case_id"]] = {
+        "case_id": case["case_id"],
+        "status": "pending",
+    }
+    return case
+
+
+async def test_accept_offer_requires_terminal_acceptance(monkeypatch):
+    reset_backend_state()
+    case = pending_case()
+    calls = []
+
+    async def request(method, path, payload=None):
+        calls.append((method, path, payload))
+        return {
+            "status": "resolved_accepted",
+            "resolution": {"outcome": "accepted", "refund_amount_usd": 2.70},
+        }
+
+    monkeypatch.setattr(backend, "merchant_request", request)
+    result = await backend.resolve_merchant_decision(
+        case,
+        backend.DecisionResolutionRequest(decision="accept_offer"),
+    )
+    assert result["status"] == "completed"
+    assert result["merchant_response"]["status"] == "resolved_accepted"
+    assert result["negotiation"]["resolution"]["refund_amount_usd"] == 2.70
+    assert case["case_id"] not in backend.PENDING_DECISIONS
+    assert calls == [
+        ("POST", "/disputes/dsp_decision_test/accept", None),
+    ]
+
+
+@pytest.mark.parametrize(
+    "terminal_status,outcome,refund",
+    [
+        ("resolved_full", "full_refund", 4.50),
+        ("denied", "denied", 0.0),
+    ],
+)
+async def test_reject_polls_until_terminal(
+    monkeypatch, terminal_status, outcome, refund
+):
+    reset_backend_state()
+    case = pending_case()
+    calls = []
+    responses = iter(
+        [
+            {"status": "escalated", "resolution": None},
+            {"status": "escalated", "resolution": None},
+            {
+                "status": terminal_status,
+                "resolution": {
+                    "outcome": outcome,
+                    "refund_amount_usd": refund,
+                },
+            },
+        ]
+    )
+
+    async def request(method, path, payload=None):
+        calls.append((method, path, payload))
+        return next(responses)
+
+    async def no_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(backend, "merchant_request", request)
+    monkeypatch.setattr(backend.asyncio, "sleep", no_sleep)
+    result = await backend.resolve_merchant_decision(
+        case,
+        backend.DecisionResolutionRequest(
+            decision="reject_and_request_full_refund",
+            reason="Full refund requested",
+        ),
+    )
+    assert result["status"] == "completed"
+    assert result["merchant_response"]["status"] == terminal_status
+    assert result["negotiation"]["resolution"]["outcome"] == outcome
+    assert result["negotiation"]["polling_timed_out"] is False
+    assert case["case_id"] not in backend.PENDING_DECISIONS
+    assert calls[0] == (
+        "POST",
+        "/disputes/dsp_decision_test/reject",
+        {"reason": "Full refund requested"},
+    )
+    assert [call[0] for call in calls].count("POST") == 1
+    assert [call[0] for call in calls].count("GET") == 2
+
+
+async def test_reject_timeout_stays_awaiting_merchant(monkeypatch):
+    reset_backend_state()
+    case = pending_case()
+    calls = []
+
+    async def request(method, path, payload=None):
+        calls.append((method, path, payload))
+        return {"status": "escalated", "resolution": None}
+
+    async def no_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(backend, "merchant_request", request)
+    monkeypatch.setattr(backend.asyncio, "sleep", no_sleep)
+    monkeypatch.setattr(backend, "MERCHANT_POLL_MAX_ATTEMPTS", 2)
+    result = await backend.resolve_merchant_decision(
+        case,
+        backend.DecisionResolutionRequest(
+            decision="reject_and_request_full_refund"
+        ),
+    )
+    assert result["status"] == "awaiting_merchant"
+    assert result["merchant_response"]["status"] == "escalated"
+    assert result["negotiation"]["polling_timed_out"] is True
+    assert case["case_id"] not in backend.PENDING_DECISIONS
+    assert [call[0] for call in calls] == ["POST", "GET", "GET"]
+
+
+async def test_unexpected_accept_status_preserves_pending_decision(monkeypatch):
+    reset_backend_state()
+    case = pending_case()
+
+    async def request(_method, _path, _payload=None):
+        return {"status": "counter_offer", "resolution": None}
+
+    monkeypatch.setattr(backend, "merchant_request", request)
+    with pytest.raises(backend.APIError) as exc_info:
+        await backend.resolve_merchant_decision(
+            case,
+            backend.DecisionResolutionRequest(decision="accept_offer"),
+        )
+    assert exc_info.value.code == "unexpected_merchant_status"
+    assert case["status"] == "awaiting_human"
+    assert case["case_id"] in backend.PENDING_DECISIONS
+
+
+async def test_merchant_failure_uses_safe_error_envelope(monkeypatch):
+    reset_backend_state()
+    case = pending_case()
+
+    async def request(_method, _path, _payload=None):
+        raise backend.APIError(
+            502,
+            "merchant_service_unavailable",
+            "Merchant service is unavailable",
+        )
+
+    monkeypatch.setattr(backend, "merchant_request", request)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=backend.app),
+        base_url="http://backend.test",
+        trust_env=False,
+    ) as client:
+        response = await client.post(
+            f"/decisions/{case['case_id']}/resolve",
+            json={"decision": "accept_offer"},
+        )
+    assert response.status_code == 502
+    assert response.json() == {
+        "error": {
+            "code": "merchant_service_unavailable",
+            "message": "Merchant service is unavailable",
+        }
+    }
+    assert case["case_id"] in backend.PENDING_DECISIONS
+
+
+def test_merchant_url_precedence(monkeypatch):
+    monkeypatch.setenv("MERCHANT_API_URL", "http://preferred:8002/")
+    monkeypatch.setenv("MOCK_MERCHANT_URL", "http://legacy:8002")
+    assert backend.merchant_api_url() == "http://preferred:8002"
+    monkeypatch.delenv("MERCHANT_API_URL")
+    assert backend.merchant_api_url() == "http://legacy:8002"
+    monkeypatch.delenv("MOCK_MERCHANT_URL")
+    assert backend.merchant_api_url() == "http://127.0.0.1:8002"
+
+
+@pytest.mark.parametrize(
+    "merchant_id,terminal_status,outcome",
+    [
+        ("mrc_netflix", "resolved_full", "full_refund"),
+        ("mrc_fitlife", "denied", "denied"),
+    ],
+)
+async def test_backend_rejection_with_real_mock_merchant(
+    monkeypatch, merchant_id, terminal_status, outcome
+):
+    reset_backend_state()
+    merchant = load_mock_merchant_module()
+    merchant_app = merchant.create_app(DATASETS_DIR)
+    monkeypatch.setenv("MERCHANT_API_URL", "http://merchant.test")
+    backend.app.state.merchant_transport = httpx.ASGITransport(app=merchant_app)
+
+    claim = {
+        "case_id": "case_decision_test",
+        "merchant_id": merchant_id,
+        "user_id": "usr_demo",
+        "transaction_id": "txn_0031",
+        "claim_type": "price_hike",
+        "requested_amount_usd": 4.50,
+        "currency": "USD",
+        "message": "Canonical integration test claim.",
+        "evidence": [],
+    }
+
+    try:
+        async with merchant_app.router.lifespan_context(merchant_app):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=merchant_app),
+                base_url="http://merchant.test",
+                trust_env=False,
+            ) as merchant_client:
+                created = await merchant_client.post(
+                    "/disputes",
+                    json=claim,
+                    headers={"X-Demo-Speed": "instant"},
+                )
+                dispute_id = created.json()["dispute_id"]
+                assert (await merchant_client.get(
+                    f"/disputes/{dispute_id}"
+                )).json()["status"] == "counter_offer"
+
+            case = pending_case()
+            case["dispute_id"] = dispute_id
+            result = await backend.resolve_merchant_decision(
+                case,
+                backend.DecisionResolutionRequest(
+                    decision="reject_and_request_full_refund",
+                    reason="Requesting the full supported refund",
+                ),
+            )
+    finally:
+        del backend.app.state.merchant_transport
+
+    assert result["status"] == "completed"
+    assert result["merchant_response"]["status"] == terminal_status
+    assert result["merchant_response"]["resolution"]["outcome"] == outcome
+    assert result["negotiation"]["polling_timed_out"] is False
