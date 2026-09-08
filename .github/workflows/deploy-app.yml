@@ -71,26 +71,46 @@ jobs:
 
       - name: Package and Deploy Lambda Code
         run: |
-          if [ -d "backend" ] && [ -f "backend/main.py" ]; then
-            echo "Packaging backend application..."
-            mkdir -p build_pkg
-            if [ -f "backend/requirements.txt" ]; then
-              pip install -r backend/requirements.txt -t build_pkg/
-            fi
-            cp -r backend/* build_pkg/
-            if [ -d "agents" ]; then
-              cp -r agents build_pkg/
-            fi
-            cd build_pkg
-            zip -r ../backend_deploy.zip .
-            cd ..
-            echo "Deploying zip artifact to Lambda chargeguard-backend..."
-            aws lambda update-function-code \
-              --function-name chargeguard-backend \
-              --zip-file fileb://backend_deploy.zip
-          else
-            echo "No deployable backend/main.py found yet; skipping Lambda package deployment."
+          set -euo pipefail
+
+          if [ ! -f "backend/main.py" ]; then
+            echo "No backend/main.py yet; skipping Lambda deployment."
+            exit 0
           fi
+
+          # backend/main.py derives project_root from its own parent's parent and
+          # loads agents/, config.py and datasets/ relative to it, so the zip has to
+          # mirror the repo layout. Flattening backend/* into the root breaks all three.
+          for required in agents config.py datasets backend/requirements.txt; do
+            if [ ! -e "$required" ]; then
+              echo "::error::Missing $required, which backend/main.py imports or reads at runtime."
+              echo "::error::The function would deploy successfully and then fail on its first invocation."
+              exit 1
+            fi
+          done
+
+          if ! grep -qE '^handler[[:space:]]*=' backend/main.py; then
+            echo "::error::backend/main.py defines no module-level 'handler'."
+            echo "::error::FastAPI is an ASGI app; Lambda needs an adapter. Add 'mangum' to"
+            echo "::error::backend/requirements.txt and, at the end of backend/main.py:"
+            echo "::error::    from mangum import Mangum"
+            echo "::error::    handler = Mangum(app)"
+            echo "::error::Without it every request through API Gateway returns 502."
+            exit 1
+          fi
+
+          mkdir -p build_pkg
+          pip install --quiet -r backend/requirements.txt -t build_pkg/
+          cp -r backend agents config.py datasets build_pkg/
+
+          cd build_pkg && zip -qr ../backend_deploy.zip . && cd ..
+          echo "Package size: $(du -h backend_deploy.zip | cut -f1)"
+
+          aws lambda update-function-code \
+            --function-name chargeguard-backend \
+            --zip-file fileb://backend_deploy.zip \
+            --no-cli-pager
+          aws lambda wait function-updated --function-name chargeguard-backend
 
   deploy-frontend:
     name: Trigger Amplify Frontend Build

@@ -80,7 +80,31 @@ Para gatear `terraform apply` en `deploy-infra.yml`:
 
 ---
 
-## 5. Protección de la Rama `main`
+## 5. Contrato de empaquetado de la Lambda
+
+`deploy-app.yml` sube un zip que **replica la estructura del repositorio**, no el contenido de `backend/` aplanado:
+
+```
+backend/main.py     config.py     agents/     datasets/     <dependencias pip>
+```
+
+Es obligatorio porque `backend/main.py` calcula `project_root` como el directorio padre de su propio padre y desde ahí resuelve `agents/`, `config.py` y `datasets/`. Si se aplanara `backend/*` en la raíz del zip, `project_root` apuntaría a `/var` y la función fallaría en la primera invocación con `ModuleNotFoundError` y `FileNotFoundError`.
+
+Por eso el handler es **`backend.main.handler`**, tanto en el placeholder de Terraform como en el despliegue real. Si se cambia uno hay que cambiar el otro, o el siguiente `terraform apply` revierte la configuración y rompe la función.
+
+> [!IMPORTANT]
+> **FastAPI no corre en Lambda sin adaptador.** `backend/main.py` debe exponer un `handler` a nivel de módulo:
+> ```python
+> from mangum import Mangum
+> handler = Mangum(app)
+> ```
+> con `mangum` en `backend/requirements.txt`. Sin eso, API Gateway devuelve 502 en cada petición. El workflow verifica que exista ese `handler` y **aborta el despliegue** si falta, en vez de publicar una función rota.
+
+El workflow también aborta si falta `agents/`, `config.py`, `datasets/` o `backend/requirements.txt`, porque son dependencias de ejecución: sin ellas el despliegue "tiene éxito" y la función revienta en la primera petición.
+
+---
+
+## 6. Protección de la Rama `main`
 
 Para cumplir las reglas innegociables del proyecto:
 - Todo cambio requiere Pull Request obligatorio (prohibidos los commits directos a `main`).
