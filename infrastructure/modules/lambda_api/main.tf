@@ -53,6 +53,7 @@ resource "aws_lambda_function" "backend" {
       BANK_API_URL                = "${trimsuffix(aws_apigatewayv2_stage.default.invoke_url, "/")}/mock/bank"
       BEDROCK_MODEL_ID            = var.bedrock_model_id
       BEDROCK_MODEL_ID_FAST       = var.bedrock_model_id_fast
+      MERCHANT_DEMO_SPEED         = "instant"
     }
   }
 

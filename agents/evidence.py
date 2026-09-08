@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel
 from strands import Agent
 
-from config import MODEL_ID
+from config import MODEL_ID_FAST
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -73,7 +73,7 @@ evidence_agent = Agent(
         "subscription billing anomaly, including invoices, emails, "
         "transaction history, cancellation evidence and subscription terms."
     ),
-    model=MODEL_ID,
+    model=MODEL_ID_FAST,
     system_prompt=SYSTEM_PROMPT,
     callback_handler=None,
 )
