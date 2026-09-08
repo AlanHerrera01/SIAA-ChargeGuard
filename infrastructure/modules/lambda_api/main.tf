@@ -1,3 +1,6 @@
+# The placeholder lives at backend/main.py so it and the real deployment share one
+# handler path. deploy-app.yml ships the repo layout because backend/main.py resolves
+# agents/, config.py and datasets/ relative to its own parent directory.
 data "archive_file" "bootstrap" {
   type        = "zip"
   output_path = "${path.module}/bootstrap.zip"
@@ -19,7 +22,7 @@ data "archive_file" "bootstrap" {
               })
           }
     EOT
-    filename = "main.py"
+    filename = "backend/main.py"
   }
 }
 
@@ -31,7 +34,7 @@ resource "aws_cloudwatch_log_group" "backend" {
 resource "aws_lambda_function" "backend" {
   function_name    = "chargeguard-backend"
   role             = var.lambda_role_arn
-  handler          = "main.handler"
+  handler          = "backend.main.handler"
   runtime          = "python3.12"
   filename         = data.archive_file.bootstrap.output_path
   source_code_hash = data.archive_file.bootstrap.output_base64sha256

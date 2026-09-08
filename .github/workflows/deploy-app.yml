@@ -1,0 +1,161 @@
+name: Deploy Application
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - 'agents/**'
+      - 'frontend/**'
+      - '.github/workflows/deploy-app.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-app
+  cancel-in-progress: false
+
+jobs:
+  filter:
+    name: Detect App Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'agents/**'
+              - '.github/workflows/deploy-app.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/deploy-app.yml'
+
+  deploy-backend:
+    name: Build & Deploy Backend Lambda
+    needs: filter
+    if: ${{ needs.filter.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          audience: sts.amazonaws.com
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Package and Deploy Lambda Code
+        run: |
+          set -euo pipefail
+
+          if [ ! -f "backend/main.py" ]; then
+            echo "No backend/main.py yet; skipping Lambda deployment."
+            exit 0
+          fi
+
+          # backend/main.py derives project_root from its own parent's parent and
+          # loads agents/, config.py and datasets/ relative to it, so the zip has to
+          # mirror the repo layout. Flattening backend/* into the root breaks all three.
+          for required in agents config.py datasets backend/requirements.txt; do
+            if [ ! -e "$required" ]; then
+              echo "::error::Missing $required, which backend/main.py imports or reads at runtime."
+              echo "::error::The function would deploy successfully and then fail on its first invocation."
+              exit 1
+            fi
+          done
+
+          # Parsed rather than grepped: the assignment legitimately sits inside a
+          # try/except that falls back to handler = None outside Lambda, which an
+          # anchored pattern would miss.
+          if ! python - <<'PY'
+          import ast, sys
+
+          def assigns_handler(body):
+              for node in body:
+                  if isinstance(node, ast.Assign) and any(
+                      isinstance(t, ast.Name) and t.id == "handler" for t in node.targets
+                  ):
+                      return True
+                  blocks = [getattr(node, attr, []) for attr in ("body", "orelse", "finalbody")]
+                  blocks += [h.body for h in getattr(node, "handlers", [])]
+                  if isinstance(node, (ast.Try, ast.If)) and any(assigns_handler(b) for b in blocks):
+                      return True
+              return False
+
+          sys.exit(0 if assigns_handler(ast.parse(open("backend/main.py").read()).body) else 1)
+          PY
+          then
+            echo "::error::backend/main.py assigns no module-level 'handler'."
+            echo "::error::FastAPI is an ASGI app; Lambda needs an adapter. Add 'mangum' to"
+            echo "::error::backend/requirements.txt and, at module level in backend/main.py:"
+            echo "::error::    from mangum import Mangum"
+            echo "::error::    handler = Mangum(app)"
+            echo "::error::Without it every request through API Gateway returns 502."
+            exit 1
+          fi
+
+          mkdir -p build_pkg
+          pip install --quiet -r backend/requirements.txt -t build_pkg/
+          cp -r backend agents config.py datasets build_pkg/
+
+          cd build_pkg && zip -qr ../backend_deploy.zip . && cd ..
+          echo "Package size: $(du -h backend_deploy.zip | cut -f1)"
+
+          aws lambda update-function-code \
+            --function-name chargeguard-backend \
+            --zip-file fileb://backend_deploy.zip \
+            --no-cli-pager
+          aws lambda wait function-updated --function-name chargeguard-backend
+
+  deploy-frontend:
+    name: Trigger Amplify Frontend Build
+    needs: filter
+    if: ${{ needs.filter.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS Credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          audience: sts.amazonaws.com
+
+      - name: Trigger Amplify Release Job
+        run: |
+          if [ -n "${{ vars.AMPLIFY_APP_ID }}" ]; then
+            echo "Triggering Amplify build job for app ${{ vars.AMPLIFY_APP_ID }}..."
+            aws amplify start-job \
+              --app-id "${{ vars.AMPLIFY_APP_ID }}" \
+              --branch-name main \
+              --job-type RELEASE
+          else
+            echo "vars.AMPLIFY_APP_ID is not configured in repository variables; skipping Amplify trigger."
+          fi
