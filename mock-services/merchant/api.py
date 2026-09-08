@@ -1,5 +1,4 @@
-"""In-memory merchant desk. Polling projects state; it never schedules work."""
-
+import json
 import os
 from collections.abc import Callable
 from contextlib import asynccontextmanager
@@ -7,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Literal
+from uuid import uuid4
 
 from fastapi import FastAPI, Header
 from fastapi.exceptions import RequestValidationError
@@ -239,6 +239,115 @@ def error(status: int, code: str, message: str) -> JSONResponse:
     )
 
 
+class MerchantDisputeDynamoStore:
+    """DynamoDB-backed store for merchant disputes in AWS Lambda."""
+
+    def __init__(self, table_name: str) -> None:
+        import boto3
+
+        endpoint_url = os.getenv("DYNAMODB_ENDPOINT_URL") or os.getenv(
+            "DYNAMODB_ENDPOINT"
+        )
+        self.table = boto3.resource(
+            "dynamodb",
+            region_name=os.getenv("AWS_REGION")
+            or os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+            endpoint_url=endpoint_url,
+        ).Table(table_name)
+        self.record_type = "merchant_dispute"
+
+    def get(self, key: str, default=None) -> Record | None:
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def __getitem__(self, key: str) -> Record:
+        response = self.table.get_item(Key={"decision_id": key}, ConsistentRead=True)
+        item = response.get("Item")
+        if not item or item.get("record_type") != self.record_type:
+            raise KeyError(key)
+        return self._from_dict(json.loads(item["payload"]))
+
+    def __setitem__(self, key: str, record: Record) -> None:
+        payload_dict = self._to_dict(record)
+        item = {
+            "decision_id": key,
+            "record_type": self.record_type,
+            "case_id": record.claim.case_id,
+            "status": "pending" if record.decision is None else "resolved",
+            "created_at": record.created_at.isoformat(),
+            "payload": json.dumps(payload_dict, separators=(",", ":")),
+        }
+        self.table.put_item(Item=item)
+
+    def values(self) -> list[Record]:
+        items: list[Record] = []
+        scan_kwargs = {
+            "FilterExpression": "record_type = :record_type",
+            "ExpressionAttributeValues": {":record_type": self.record_type},
+            "ProjectionExpression": "decision_id, payload",
+        }
+        while True:
+            response = self.table.scan(**scan_kwargs)
+            for item in response.get("Items", []):
+                try:
+                    items.append(self._from_dict(json.loads(item["payload"])))
+                except Exception:
+                    pass
+            last_key = response.get("LastEvaluatedKey")
+            if not last_key:
+                break
+            scan_kwargs["ExclusiveStartKey"] = last_key
+        return items
+
+    def clear(self) -> None:
+        scan_kwargs = {
+            "FilterExpression": "record_type = :record_type",
+            "ExpressionAttributeValues": {":record_type": self.record_type},
+            "ProjectionExpression": "decision_id",
+        }
+        with self.table.batch_writer() as batch:
+            while True:
+                response = self.table.scan(**scan_kwargs)
+                for item in response.get("Items", []):
+                    batch.delete_item(Key={"decision_id": item["decision_id"]})
+                last_key = response.get("LastEvaluatedKey")
+                if not last_key:
+                    break
+                scan_kwargs["ExclusiveStartKey"] = last_key
+
+    @staticmethod
+    def _to_dict(record: Record) -> dict:
+        return {
+            "dispute_id": record.dispute_id,
+            "claim": record.claim.model_dump(mode="json"),
+            "policy": record.policy.model_dump(mode="json"),
+            "created_at": record.created_at.isoformat(),
+            "delay_factor": record.delay_factor,
+            "decision": record.decision,
+            "decision_at": record.decision_at.isoformat()
+            if record.decision_at
+            else None,
+            "reason": record.reason,
+        }
+
+    @staticmethod
+    def _from_dict(d: dict) -> Record:
+        return Record(
+            dispute_id=d["dispute_id"],
+            claim=Claim.model_validate(d["claim"]),
+            policy=Policy.model_validate(d["policy"]),
+            created_at=datetime.fromisoformat(d["created_at"]),
+            delay_factor=d["delay_factor"],
+            decision=d.get("decision"),
+            decision_at=datetime.fromisoformat(d["decision_at"])
+            if d.get("decision_at")
+            else None,
+            reason=d.get("reason", ""),
+        )
+
+
 def create_app(
     dataset_dir: Path | None = None, *, clock: Callable[[], datetime] | None = None
 ) -> FastAPI:
@@ -254,8 +363,19 @@ def create_app(
         app.state.merchants = {merchant.merchant_id: merchant for merchant in merchants}
         if len(app.state.merchants) != len(merchants):
             raise ValueError("Duplicate merchant IDs in dataset")
-        app.state.disputes = {}
-        app.state.sequence = 0
+
+        backend = os.getenv("STATE_BACKEND")
+        use_dynamodb = backend == "dynamodb" or (
+            backend is None and bool(os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+        )
+        if use_dynamodb:
+            table_name = os.getenv("DYNAMODB_TABLE_DECISIONS", "chargeguard-decisions")
+            app.state.disputes = MerchantDisputeDynamoStore(table_name)
+            app.state.use_dynamodb = True
+        else:
+            app.state.disputes = {}
+            app.state.use_dynamodb = False
+            app.state.sequence = 0
         yield
 
     app = FastAPI(
@@ -324,8 +444,12 @@ def create_app(
         factor = (
             0 if x_demo_speed == "instant" else (4 if x_demo_scenario == "slow" else 1)
         )
-        app.state.sequence += 1
-        record = Record(f"dsp_{app.state.sequence:06d}", claim, policy, now(), factor)
+        if getattr(app.state, "use_dynamodb", False):
+            dispute_id = f"dsp_{uuid4().hex[:12]}"
+        else:
+            app.state.sequence += 1
+            dispute_id = f"dsp_{app.state.sequence:06d}"
+        record = Record(dispute_id, claim, policy, now(), factor)
         app.state.disputes[record.dispute_id] = record
         return project(record, record.created_at, advance=False)
 
@@ -355,6 +479,7 @@ def create_app(
             )
         # No awaits between validation and mutation: one worker serializes commands.
         record.decision, record.decision_at, record.reason = decision, at, reason
+        app.state.disputes[record.dispute_id] = record
         return project(record, at, advance=False)
 
     @app.post("/disputes/{dispute_id}/accept", response_model=Dispute)
@@ -368,7 +493,8 @@ def create_app(
     @app.post("/demo/reset")
     async def reset() -> dict[str, str]:
         app.state.disputes.clear()
-        app.state.sequence = 0
+        if hasattr(app.state, "sequence"):
+            app.state.sequence = 0
         return {"status": "ok"}
 
     return app

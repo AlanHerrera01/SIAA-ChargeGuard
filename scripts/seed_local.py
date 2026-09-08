@@ -158,8 +158,8 @@ def connect(settings: Settings) -> Services:
     options["config"] = Config(
         connect_timeout=2,
         read_timeout=5,
-        retries={"mode": "standard", "total_max_attempts": 2},
-        s3={"addressing_style": "path"},
+        retries={"mode": "standard", "total_max_attempts": 3},
+        s3={"addressing_style": "path"} if settings.local else {},
         # Empty AWS_ENDPOINT_URL must not fall back to per-service SDK overrides.
         ignore_configured_endpoint_urls=True,
     )

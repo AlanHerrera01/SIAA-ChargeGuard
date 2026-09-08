@@ -15,12 +15,6 @@ variable "github_repo" {
   description = "GitHub repository formatted as owner/repo for OIDC trust and Amplify integration (e.g. AlanHerrera01/SIAA-ChargeGuard)"
 }
 
-variable "github_access_token" {
-  type        = string
-  description = "GitHub Personal Access Token for AWS Amplify Hosting repository access"
-  sensitive   = true
-}
-
 variable "bedrock_model_id" {
   type        = string
   description = "Bedrock primary inference profile or model ID for autonomous reasoning"
@@ -49,4 +43,19 @@ variable "cors_allow_origins" {
   type        = list(string)
   description = "Allowed origins for API Gateway HTTP API CORS configuration"
   default     = ["*"]
+}
+
+variable "budget_limit_usd" {
+  type        = string
+  description = "Monthly AWS budget limit in USD"
+  default     = "40"
+}
+
+variable "budget_subscriber_emails" {
+  type        = list(string)
+  description = "Email subscribers for AWS Budget threshold alerts"
+  default = [
+    "christianamaguaproyectos@gmail.com",
+    "avherrera3@espe.edu.ec"
+  ]
 }

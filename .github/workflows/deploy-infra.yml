@@ -30,31 +30,15 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Verify Deployment Prerequisites
-        env:
-          AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_GITHUB_TOKEN }}
         run: |
           echo "Checking deployment prerequisites..."
-          ERRORS=0
-
           if [ ! -f "infrastructure/backend.hcl" ]; then
             echo "::error::Remote backend configuration file 'infrastructure/backend.hcl' not found!"
             echo "::error::Running apply with a local backend in CI/CD is strictly prohibited. State would be lost upon runner termination, causing orphaned AWS resources."
             echo "::error::Execute the initial bootstrap and provide infrastructure/backend.hcl before triggering CI deployments."
-            ERRORS=$((ERRORS + 1))
-          fi
-
-          if [ -z "$AMPLIFY_GITHUB_TOKEN" ]; then
-            echo "::error::Secret AMPLIFY_GITHUB_TOKEN is missing or empty!"
-            echo "::error::AWS Amplify requires a valid GitHub Personal Access Token to connect the repository and build the frontend. An invalid or placeholder token causes silent build failures."
-            echo "::error::Configure AMPLIFY_GITHUB_TOKEN in GitHub repository secrets (Settings > Secrets and variables > Actions > Secrets)."
-            ERRORS=$((ERRORS + 1))
-          fi
-
-          if [ $ERRORS -gt 0 ]; then
-            echo "Prerequisites check failed with $ERRORS error(s). Aborting pipeline."
             exit 1
           fi
-          echo "All prerequisites verified successfully."
+          echo "Backend prerequisite verified successfully."
 
       - name: Configure AWS Credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -73,12 +57,9 @@ jobs:
           terraform -chdir=infrastructure init -backend-config=backend.hcl
 
       - name: Terraform Plan
-        env:
-          AMPLIFY_GITHUB_TOKEN: ${{ secrets.AMPLIFY_GITHUB_TOKEN }}
         run: |
           terraform -chdir=infrastructure plan \
             -var="github_repo=${{ github.repository }}" \
-            -var="github_access_token=${AMPLIFY_GITHUB_TOKEN}" \
             -out=tfplan
 
       - name: Terraform Apply

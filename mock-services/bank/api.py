@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, TypeAdapter, field_validator
 from starlette.exceptions import HTTPException
 
-WEBHOOK_TIMEOUT_SECONDS = 5.0
+WEBHOOK_TIMEOUT_SECONDS = float(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "5.0"))
 
 
 class Record(BaseModel):
