@@ -9,15 +9,17 @@ Stephani Rivera
 
 ## Endpoints
 - `POST /transactions/webhook` - receives events from mock bank
-- `POST /cases/analyze` - synchronously analyzes a transaction
-- `GET /cases` - list all cases
-- `GET /cases/{id}` - case detail
-- `GET /decisions/pending` - pending human decisions
+- `POST /cases/analyze` - synchronously analyzes a transaction and returns `CaseDetail`
+- `GET /cases` - list `CaseSummary` items
+- `GET /cases/{id}` - return one `CaseDetail`
+- `GET /decisions/pending` - pending human decisions wrapped in `items`
 - `POST /decisions/{id}/resolve` - resolve a pending decision
 - `POST /demo/reset` - reload synthetic dataset
 
 The case store is intentionally in memory for the hackathon MVP. Restarting
 the backend clears cases and pending decisions.
+
+The frontend-facing JSON contract is frozen in `docs/frontend-api.md`.
 
 ## Setup
 ```bash

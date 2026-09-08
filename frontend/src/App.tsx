@@ -29,12 +29,13 @@ function App() {
     setApiError(null);
 
     try {
-      const [merchants, subscriptions, transactions, cases] = await Promise.all([
+      const [merchants, subscriptions, transactions, caseList] = await Promise.all([
         backendApi.getMerchants(),
         backendApi.getSubscriptions(),
         backendApi.getTransactions(),
         backendApi.getCases(),
       ]);
+      const cases = await Promise.all(caseList.items.map((caseSummary) => backendApi.getCase(caseSummary.case_id)));
 
       setData(adaptBackendData({ merchants, subscriptions, transactions, cases }));
     } catch (error) {

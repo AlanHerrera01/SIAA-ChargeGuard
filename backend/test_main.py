@@ -272,15 +272,57 @@ async def test_mock_bank_delivers_real_envelope_to_backend(monkeypatch):
 def pending_case():
     case = {
         "case_id": "case_decision_test",
-        "transaction_id": "txn_0031",
-        "dispute_id": "dsp_decision_test",
+        "transaction": {
+            "transaction_id": "txn_0031",
+            "subscription_id": "sub_001",
+            "merchant_id": "mrc_netflix",
+            "merchant_name": "Netflix",
+            "amount_usd": 19.99,
+            "currency": "USD",
+            "posted_at": "2026-09-14T09:10:00Z",
+            "description": "NETFLIX.COM LOS GATOS CA",
+        },
+        "anomaly": {
+            "is_anomaly": True,
+            "type": "PRICE_INCREASE",
+            "expected_amount_usd": 15.49,
+            "actual_amount_usd": 19.99,
+            "claimed_amount_usd": 4.50,
+            "confidence": 0.98,
+            "reason": "The recurring charge increased.",
+        },
+        "evidence": [],
+        "dispute": {
+            "dispute_id": "dsp_decision_test",
+            "claim_type": "price_hike",
+            "requested_amount_usd": 4.50,
+            "message": "Canonical integration test claim.",
+        },
+        "merchant": {
+            "status": "counter_offer",
+            "offer": None,
+            "resolution": None,
+        },
+        "decision": {
+            "required": True,
+            "recommendation": "reject_and_request_full_refund",
+            "reason": "The evidence supports the full refund.",
+        },
         "status": "awaiting_human",
-        "merchant_response": {"status": "counter_offer"},
-        "negotiation": {"recommendation": "reject_and_request_full_refund"},
+        "timeline": [],
+        "created_at": "2026-09-14T09:10:00Z",
+        "updated_at": "2026-09-14T09:10:04Z",
     }
     backend.CASES[case["case_id"]] = case
     backend.PENDING_DECISIONS[case["case_id"]] = {
         "case_id": case["case_id"],
+        "dispute_id": "dsp_decision_test",
+        "merchant_name": "Netflix",
+        "requested_amount_usd": 4.50,
+        "offered_amount_usd": 2.70,
+        "currency": "USD",
+        "recommendation": "reject_and_request_full_refund",
+        "reason": "The evidence supports the full refund.",
         "status": "pending",
     }
     return case
@@ -303,9 +345,9 @@ async def test_accept_offer_requires_terminal_acceptance(monkeypatch):
         case,
         backend.DecisionResolutionRequest(decision="accept_offer"),
     )
-    assert result["status"] == "completed"
-    assert result["merchant_response"]["status"] == "resolved_accepted"
-    assert result["negotiation"]["resolution"]["refund_amount_usd"] == 2.70
+    assert result["status"] == "resolved"
+    assert result["merchant"]["status"] == "resolved_accepted"
+    assert result["merchant"]["resolution"]["refund_amount_usd"] == 2.70
     assert case["case_id"] not in backend.PENDING_DECISIONS
     assert calls == [
         ("POST", "/disputes/dsp_decision_test/accept", None),
@@ -355,10 +397,9 @@ async def test_reject_polls_until_terminal(
             reason="Full refund requested",
         ),
     )
-    assert result["status"] == "completed"
-    assert result["merchant_response"]["status"] == terminal_status
-    assert result["negotiation"]["resolution"]["outcome"] == outcome
-    assert result["negotiation"]["polling_timed_out"] is False
+    assert result["status"] == "resolved"
+    assert result["merchant"]["status"] == terminal_status
+    assert result["merchant"]["resolution"]["outcome"] == outcome
     assert case["case_id"] not in backend.PENDING_DECISIONS
     assert calls[0] == (
         "POST",
@@ -391,8 +432,7 @@ async def test_reject_timeout_stays_awaiting_merchant(monkeypatch):
         ),
     )
     assert result["status"] == "awaiting_merchant"
-    assert result["merchant_response"]["status"] == "escalated"
-    assert result["negotiation"]["polling_timed_out"] is True
+    assert result["merchant"]["status"] == "escalated"
     assert case["case_id"] not in backend.PENDING_DECISIONS
     assert [call[0] for call in calls] == ["POST", "GET", "GET"]
 
@@ -502,7 +542,7 @@ async def test_backend_rejection_with_real_mock_merchant(
                 )).json()["status"] == "counter_offer"
 
             case = pending_case()
-            case["dispute_id"] = dispute_id
+            case["dispute"]["dispute_id"] = dispute_id
             result = await backend.resolve_merchant_decision(
                 case,
                 backend.DecisionResolutionRequest(
@@ -513,7 +553,6 @@ async def test_backend_rejection_with_real_mock_merchant(
     finally:
         del backend.app.state.merchant_transport
 
-    assert result["status"] == "completed"
-    assert result["merchant_response"]["status"] == terminal_status
-    assert result["merchant_response"]["resolution"]["outcome"] == outcome
-    assert result["negotiation"]["polling_timed_out"] is False
+    assert result["status"] == "resolved"
+    assert result["merchant"]["status"] == terminal_status
+    assert result["merchant"]["resolution"]["outcome"] == outcome
