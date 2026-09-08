@@ -1,0 +1,67 @@
+import type React from "react";
+import { Route, Routes } from "react-router-dom";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { LoadingView } from "@/components/shared/LoadingView";
+import { useRouteLoading } from "@/hooks/useRouteLoading";
+import { Dashboard } from "@/pages/Dashboard";
+import { DisputeDetail } from "@/pages/DisputeDetail";
+import { Subscriptions } from "@/pages/Subscriptions";
+import type { ActivityLog, Case, CaseViewModel, Metrics, SubscriptionViewModel } from "@/types/chargeguard";
+
+type AppRoutesProps = {
+  metrics: Metrics;
+  subscriptions: SubscriptionViewModel[];
+  caseViewModels: CaseViewModel[];
+  activeCases: Case[];
+  activity: ActivityLog[];
+  isLoadingData: boolean;
+  onSimulateIncrease: (id: string) => void | Promise<void>;
+  onDecisionResolved: () => void;
+};
+
+function WithRouteLoading({ children }: { children: React.ReactNode }) {
+  const isLoading = useRouteLoading(400);
+  return isLoading ? <LoadingView /> : children;
+}
+
+export function AppRoutes({
+  metrics,
+  subscriptions,
+  caseViewModels,
+  activeCases,
+  activity,
+  isLoadingData,
+  onSimulateIncrease,
+  onDecisionResolved,
+}: AppRoutesProps) {
+  return (
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route
+          index
+          element={
+            <WithRouteLoading>
+              {isLoadingData ? <LoadingView /> : <Dashboard activeCases={activeCases} activity={activity} caseViewModels={caseViewModels} metrics={metrics} />}
+            </WithRouteLoading>
+          }
+        />
+        <Route
+          path="/subscriptions"
+          element={
+            <WithRouteLoading>
+              {isLoadingData ? <LoadingView /> : <Subscriptions onSimulateIncrease={onSimulateIncrease} subscriptions={subscriptions} />}
+            </WithRouteLoading>
+          }
+        />
+        <Route
+          path="/disputes/:id"
+          element={
+            <WithRouteLoading>
+              <DisputeDetail caseViewModels={caseViewModels} onDecisionResolved={onDecisionResolved} />
+            </WithRouteLoading>
+          }
+        />
+      </Route>
+    </Routes>
+  );
+}
