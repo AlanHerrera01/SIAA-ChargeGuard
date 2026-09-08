@@ -125,7 +125,6 @@ services:
         VITE_MOCK_BANK_API_URL: ${VITE_MOCK_BANK_API_URL:-http://localhost:8001}
         VITE_MOCK_MERCHANT_API_URL: ${VITE_MOCK_MERCHANT_API_URL:-http://localhost:8002}
         VITE_DEMO_USER_ID: ${VITE_DEMO_USER_ID:-usr_demo}
-        VITE_DEFAULT_CASE_ID: ${VITE_DEFAULT_CASE_ID:-case_spotify_001}
     <<: *service-defaults
     ports:
       - "5173:8080"

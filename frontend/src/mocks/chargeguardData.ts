@@ -189,7 +189,7 @@ export const chargeguardData = {
   ],
   cases: [
     {
-      case_id: "case_spotify_001",
+      case_id: "case_demo_001",
       user_id: "usr_demo",
       subscription_id: "sub_003",
       merchant_id: "mrc_spotify",
@@ -198,7 +198,7 @@ export const chargeguardData = {
       confidence: 0.96,
       claimed_amount_usd: 5,
       status: "awaiting_human",
-      dispute_id: "dsp_spotify_001",
+      dispute_id: "dsp_demo_001",
       created_at: "2026-09-10T18:05:00Z",
       updated_at: "2026-09-10T18:05:04Z",
       timeline: [
@@ -211,8 +211,8 @@ export const chargeguardData = {
   ],
   merchant_disputes: [
     {
-      dispute_id: "dsp_spotify_001",
-      case_id: "case_spotify_001",
+      dispute_id: "dsp_demo_001",
+      case_id: "case_demo_001",
       merchant_id: "mrc_spotify",
       transaction_id: "txn_0032",
       status: "counter_offer",
@@ -233,8 +233,8 @@ export const chargeguardData = {
   ],
   decisions: [
     {
-      decision_id: "dec_spotify_001",
-      case_id: "case_spotify_001",
+      decision_id: "dec_demo_001",
+      case_id: "case_demo_001",
       question: "Accept merchant counter-offer?",
       context: "El comercio ofrece $19.97, por encima del reclamo original de $5.00. El agente recomienda aceptar para maximizar recuperacion y cerrar sin escalacion.",
       options: [

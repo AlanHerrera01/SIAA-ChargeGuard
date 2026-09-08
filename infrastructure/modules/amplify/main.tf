@@ -29,7 +29,6 @@ resource "aws_amplify_app" "frontend" {
     VITE_MOCK_MERCHANT_API_URL   = "${var.api_gateway_url}/mock/merchant"
     VITE_CHARGEGUARD_DATA_SOURCE = "api"
     VITE_DEMO_USER_ID            = "usr_demo"
-    VITE_DEFAULT_CASE_ID         = "case_spotify_001"
   }
 
   custom_rule {

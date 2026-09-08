@@ -1,17 +1,22 @@
-# Documentation
+# Documentation — ChargeGuard
 
-## Specs (source of truth)
-- `contracts.md` - data schemas and API contracts for datasets, mock services and storage. **Agents, backend and frontend code against this file.** Owner: Ismael.
+Directorio central de especificaciones técnicas, arquitectura, guías operativas y runbooks para **ChargeGuard**.
 
-## Planning (internal)
-- `execution-plan-infra.md` - infra/devops work packages, schedule and acceptance criteria
-- `prompts-executor.md` - copy-paste prompts to hand each work package to an executing AI
+---
 
-## Still to be written
-- `architecture.png` - system architecture diagram (final version)
-- `architecture.excalidraw` - editable source
-- `human-in-the-loop.md` - decision rules for the agent
-- `demo-script.md` - walkthrough for judges and video recording
-- `local-setup.md` - running the stack locally (WP-1)
-- `deployment.md` - AWS deploy, rollback and teardown runbook (WP-8)
-- `runbook.md` - what to do if the live demo fails (WP-9)
+## 1. Especificaciones y Contratos (Source of Truth)
+- [`contracts.md`](./contracts.md): Esquemas de datos, contratos de API (FastAPI, Mocks, DynamoDB, S3) y formatos JSON/REST para agentes, backend y frontend.
+- [`human-in-the-loop.md`](./human-in-the-loop.md): Marco de seguridad y reglas de decisión que rigen la autonomía del agente y la intervención del usuario (Decision Card).
+
+## 2. Arquitectura y Modelado
+- [`architecture.excalidraw`](./architecture.excalidraw): Archivo editable en Excalidraw que detalla los componentes a 1080p (Amplify, API Gateway, Lambdas, Bedrock, DynamoDB, S3, EventBridge, CloudWatch y Mocks externos).
+- [`architecture.png`](./architecture.png): Diagrama exportado a alta definición para documentación y README.
+
+## 3. Guías Operativas y Despliegue
+- [`deployment.md`](./deployment.md): Guía paso a paso de despliegue en AWS mediante Terraform, bootstrap remoto, empaquetado de Lambdas, seed y observabilidad.
+- [`runbook.md`](./runbook.md): Procedimiento de respuesta rápida ante fallas en la demo en vivo, orden de fallbacks y diagnósticos.
+- [`demo-script.md`](./demo-script.md): Guion cronometrado minuto a minuto para el video de presentación del hackathon (5 minutos).
+
+## 4. Planificación y Ejecución
+- [`execution-plan-infra.md`](./execution-plan-infra.md): Paquetes de trabajo de infraestructura, hitos de entrega y criterios de aceptación.
+- [`prompts-executor.md`](./prompts-executor.md): Prompts estandarizados para ejecución de paquetes de trabajo.
