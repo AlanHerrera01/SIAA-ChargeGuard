@@ -89,10 +89,30 @@ jobs:
             fi
           done
 
-          if ! grep -qE '^handler[[:space:]]*=' backend/main.py; then
-            echo "::error::backend/main.py defines no module-level 'handler'."
+          # Parsed rather than grepped: the assignment legitimately sits inside a
+          # try/except that falls back to handler = None outside Lambda, which an
+          # anchored pattern would miss.
+          if ! python - <<'PY'
+          import ast, sys
+
+          def assigns_handler(body):
+              for node in body:
+                  if isinstance(node, ast.Assign) and any(
+                      isinstance(t, ast.Name) and t.id == "handler" for t in node.targets
+                  ):
+                      return True
+                  blocks = [getattr(node, attr, []) for attr in ("body", "orelse", "finalbody")]
+                  blocks += [h.body for h in getattr(node, "handlers", [])]
+                  if isinstance(node, (ast.Try, ast.If)) and any(assigns_handler(b) for b in blocks):
+                      return True
+              return False
+
+          sys.exit(0 if assigns_handler(ast.parse(open("backend/main.py").read()).body) else 1)
+          PY
+          then
+            echo "::error::backend/main.py assigns no module-level 'handler'."
             echo "::error::FastAPI is an ASGI app; Lambda needs an adapter. Add 'mangum' to"
-            echo "::error::backend/requirements.txt and, at the end of backend/main.py:"
+            echo "::error::backend/requirements.txt and, at module level in backend/main.py:"
             echo "::error::    from mangum import Mangum"
             echo "::error::    handler = Mangum(app)"
             echo "::error::Without it every request through API Gateway returns 502."
