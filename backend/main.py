@@ -29,6 +29,13 @@ if project_root not in sys.path:
 
 
 from agents.orchestrator import run_chargeguard_case
+from backend.schemas import (
+    CaseDetail,
+    CaseListResponse,
+    CaseSummary,
+    DecisionResolutionResponse,
+    PendingDecisionListResponse,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -58,7 +65,7 @@ class CaseAnalysisRequest(BaseModel):
 
 class CaseDecisionRequest(BaseModel):
     """Request model for user decision on a case"""
-    decision: str  # "accept_offer" or "reject_and_request_full_refund"
+    decision: Literal["accept_offer", "reject_and_request_full_refund"]
 
 
 class BankTransaction(BaseModel):
@@ -110,7 +117,7 @@ class TransactionPostedEvent(BaseModel):
 
 class DecisionResolutionRequest(BaseModel):
     """Human decision for a merchant counter-offer."""
-    decision: str
+    decision: Literal["accept_offer", "reject_and_request_full_refund"]
     reason: str | None = None
 
 
@@ -175,6 +182,18 @@ async def validation_error_handler(_request: Request, _exc: RequestValidationErr
     return JSONResponse(
         status_code=422,
         content=error_body("validation_error", "Request validation failed"),
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_error_handler(_request: Request, exc: HTTPException):
+    code = {
+        404: "not_found",
+        405: "method_not_allowed",
+    }.get(exc.status_code, "http_error")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_body(code, str(exc.detail)),
     )
 
 
@@ -268,40 +287,204 @@ def public_event(event: dict) -> dict:
     return {key: value for key, value in event.items() if key != "payload"}
 
 
+def find_subscription(subscription_id: str) -> dict | None:
+    return next(
+        (
+            subscription
+            for subscription in dataset_items(SUBSCRIPTIONS)
+            if subscription.get("subscription_id") == subscription_id
+        ),
+        None,
+    )
+
+
+def find_merchant(merchant_id: str) -> dict | None:
+    return next(
+        (
+            merchant
+            for merchant in dataset_items(MERCHANTS)
+            if merchant.get("merchant_id") == merchant_id
+        ),
+        None,
+    )
+
+
+def public_case_status(analysis: dict | None, merchant_response: dict | None) -> str:
+    if analysis and analysis.get("is_anomaly") is False:
+        return "dismissed"
+    merchant_status = merchant_response.get("status") if merchant_response else None
+    if merchant_status == "counter_offer":
+        return "awaiting_human"
+    if merchant_status in {"submitted", "under_review", "escalated"}:
+        return "awaiting_merchant"
+    if merchant_status in TERMINAL_MERCHANT_STATUSES:
+        return "resolved"
+    return "analyzed"
+
+
+def public_evidence(dispute: dict | None) -> list[dict]:
+    if not dispute:
+        return []
+    return [
+        {
+            "type": item["type"],
+            "uri": item.get("uri"),
+            "description": item["description"],
+        }
+        for item in dispute.get("evidence", [])
+    ]
+
+
+def public_timeline(
+    transaction: dict,
+    analysis: dict | None,
+    dispute: dict | None,
+    merchant_response: dict | None,
+    evidence_summary: str | None,
+) -> list[dict]:
+    created_at = transaction["posted_at"]
+    timeline = [
+        {
+            "at": created_at,
+            "actor": "chargeguard",
+            "event": "anomaly_detected" if analysis and analysis.get("is_anomaly") else "transaction_analyzed",
+            "detail": analysis.get("reason", "Transaction analyzed by ChargeGuard.") if analysis else "Transaction analyzed by ChargeGuard.",
+        }
+    ]
+    if evidence_summary:
+        timeline.append(
+            {
+                "at": created_at,
+                "actor": "chargeguard",
+                "event": "evidence_gathered",
+                "detail": evidence_summary,
+            }
+        )
+    if dispute:
+        timeline.append(
+            {
+                "at": created_at,
+                "actor": "chargeguard",
+                "event": "dispute_filed",
+                "detail": dispute["message"],
+            }
+        )
+    if merchant_response:
+        offer = merchant_response.get("offer") or {}
+        timeline.append(
+            {
+                "at": merchant_response.get("updated_at", created_at),
+                "actor": "merchant_api",
+                "event": "merchant_response",
+                "detail": offer.get("message") or merchant_response["status"],
+            }
+        )
+    return timeline
+
+
 def serialize_case(transaction_id: str, result: dict) -> dict:
-    """Store one consistent case shape for all API consumers."""
+    """Store the public CaseDetail shape guaranteed for frontend consumers."""
     dispute = to_dict(result.get("dispute")) if result.get("dispute") else None
     merchant_response = to_dict(result.get("merchant_response"))
+    analysis = to_dict(result.get("charge_analysis"))
+    evidence = to_dict(result.get("evidence"))
+    negotiation = to_dict(result.get("negotiation"))
+    transaction = find_transaction(transaction_id)
+    if transaction is None:
+        raise APIError(404, "transaction_not_found", "Transaction not found")
+
+    merchant = find_merchant(transaction["merchant_id"])
+    merchant_name = transaction.get("merchant_name") or (
+        merchant.get("name") if merchant else transaction["merchant_id"]
+    )
     case_id = (
         dispute.get("case_id") if dispute else None
     ) or f"case_{uuid4().hex[:8]}"
-    merchant_status = (
-        merchant_response.get("status")
+    status = public_case_status(analysis, merchant_response)
+    created_at = (
+        merchant_response.get("created_at")
         if isinstance(merchant_response, dict)
+        else transaction["posted_at"]
+    )
+    updated_at = (
+        merchant_response.get("updated_at")
+        if isinstance(merchant_response, dict)
+        else created_at
+    )
+    recommendation = negotiation.get("recommendation") if negotiation else None
+    if recommendation not in {"accept_offer", "reject_and_request_full_refund"}:
+        recommendation = "reject_and_request_full_refund" if status == "awaiting_human" else None
+    reason = (
+        negotiation.get("rationale")
+        or negotiation.get("reason")
+        if negotiation
         else None
     )
-    status = "awaiting_human" if merchant_status == "counter_offer" else (
-        "completed" if merchant_status else "analyzed"
-    )
-    case = {
-        "case_id": case_id,
-        "transaction_id": transaction_id,
-        "charge_analysis": to_dict(result.get("charge_analysis")),
-        "evidence": to_dict(result.get("evidence")),
-        "dispute": dispute,
-        "merchant_response": merchant_response,
-        "negotiation": to_dict(result.get("negotiation")),
-        "status": status,
-    }
-    if isinstance(merchant_response, dict):
-        case["dispute_id"] = merchant_response.get("dispute_id")
+
+    case = CaseDetail(
+        case_id=case_id,
+        transaction={
+            "transaction_id": transaction["transaction_id"],
+            "subscription_id": transaction["subscription_id"],
+            "merchant_id": transaction["merchant_id"],
+            "merchant_name": merchant_name,
+            "amount_usd": transaction["amount_usd"],
+            "currency": transaction["currency"],
+            "posted_at": transaction["posted_at"],
+            "description": transaction["description"],
+        },
+        anomaly={
+            "is_anomaly": bool(analysis and analysis.get("is_anomaly")),
+            "type": analysis.get("type", "NONE") if analysis else "NONE",
+            "expected_amount_usd": analysis.get("expected_amount", 0) if analysis else 0,
+            "actual_amount_usd": analysis.get("actual_amount", transaction["amount_usd"]) if analysis else transaction["amount_usd"],
+            "claimed_amount_usd": analysis.get("difference", 0) if analysis else 0,
+            "confidence": analysis.get("confidence", 0) if analysis else 0,
+            "reason": analysis.get("reason", "Transaction analyzed by ChargeGuard.") if analysis else "Transaction analyzed by ChargeGuard.",
+        },
+        evidence=public_evidence(dispute),
+        dispute={
+            "dispute_id": merchant_response.get("dispute_id") if merchant_response else None,
+            "claim_type": dispute.get("claim_type", "other") if dispute else "other",
+            "requested_amount_usd": dispute.get("requested_amount_usd", 0) if dispute else 0,
+            "message": dispute.get("message", "") if dispute else "",
+        }
+        if dispute
+        else None,
+        merchant={
+            "status": merchant_response.get("status") if merchant_response else None,
+            "offer": merchant_response.get("offer") if merchant_response else None,
+            "resolution": merchant_response.get("resolution") if merchant_response else None,
+        },
+        decision={
+            "required": status == "awaiting_human",
+            "recommendation": recommendation,
+            "reason": reason,
+        },
+        status=status,
+        timeline=public_timeline(
+            transaction,
+            analysis,
+            dispute,
+            merchant_response,
+            evidence.get("summary") if evidence else None,
+        ),
+        created_at=created_at,
+        updated_at=updated_at,
+    ).model_dump(mode="json")
     CASES[case_id] = case
     if status == "awaiting_human":
+        offer = merchant_response.get("offer") if merchant_response else None
         PENDING_DECISIONS[case_id] = {
             "case_id": case_id,
-            "dispute_id": case.get("dispute_id"),
+            "dispute_id": merchant_response.get("dispute_id"),
+            "merchant_name": merchant_name,
+            "requested_amount_usd": dispute.get("requested_amount_usd"),
+            "offered_amount_usd": offer.get("amount_usd") if offer else 0,
+            "currency": transaction["currency"],
+            "recommendation": recommendation or "reject_and_request_full_refund",
+            "reason": reason or "The evidence supports the full refund.",
             "status": "pending",
-            "offer": merchant_response.get("offer"),
         }
     return case
 
@@ -337,8 +520,23 @@ def process_event(event_id: str) -> None:
 def require_case(case_id: str) -> dict:
     case = CASES.get(case_id)
     if case is None:
-        raise HTTPException(status_code=404, detail=f"Case {case_id} not found")
+        raise APIError(404, "case_not_found", "Case not found")
     return case
+
+
+def summarize_case(case: dict) -> dict:
+    return CaseSummary(
+        case_id=case["case_id"],
+        transaction_id=case["transaction"]["transaction_id"],
+        merchant_id=case["transaction"]["merchant_id"],
+        merchant_name=case["transaction"]["merchant_name"],
+        anomaly_type=case["anomaly"]["type"],
+        claimed_amount_usd=case["anomaly"]["claimed_amount_usd"],
+        currency=case["transaction"]["currency"],
+        status=case["status"],
+        created_at=case["created_at"],
+        updated_at=case["updated_at"],
+    ).model_dump(mode="json")
 
 
 # Health check endpoint
@@ -357,7 +555,7 @@ async def health_check():
 async def get_transactions():
     """Get all transactions from dataset"""
     if TRANSACTIONS is None:
-        raise HTTPException(status_code=500, detail="Transactions data not loaded")
+        raise APIError(500, "dataset_not_loaded", "Transactions data not loaded")
     return TRANSACTIONS
 
 
@@ -365,7 +563,7 @@ async def get_transactions():
 async def get_transaction(transaction_id: str):
     """Get a specific transaction by ID"""
     if TRANSACTIONS is None:
-        raise HTTPException(status_code=500, detail="Transactions data not loaded")
+        raise APIError(500, "dataset_not_loaded", "Transactions data not loaded")
     
     tx_list = dataset_items(TRANSACTIONS)
     transaction = next(
@@ -377,7 +575,7 @@ async def get_transaction(transaction_id: str):
     )
     
     if not transaction:
-        raise HTTPException(status_code=404, detail=f"Transaction {transaction_id} not found")
+        raise APIError(404, "transaction_not_found", "Transaction not found")
     
     return transaction
 
@@ -386,7 +584,7 @@ async def get_transaction(transaction_id: str):
 async def get_subscriptions():
     """Get all subscriptions from dataset"""
     if SUBSCRIPTIONS is None:
-        raise HTTPException(status_code=500, detail="Subscriptions data not loaded")
+        raise APIError(500, "dataset_not_loaded", "Subscriptions data not loaded")
     return SUBSCRIPTIONS
 
 
@@ -394,7 +592,7 @@ async def get_subscriptions():
 async def get_subscription(subscription_id: str):
     """Get a specific subscription by ID"""
     if SUBSCRIPTIONS is None:
-        raise HTTPException(status_code=500, detail="Subscriptions data not loaded")
+        raise APIError(500, "dataset_not_loaded", "Subscriptions data not loaded")
     
     sub_list = dataset_items(SUBSCRIPTIONS)
     subscription = next(
@@ -406,7 +604,7 @@ async def get_subscription(subscription_id: str):
     )
     
     if not subscription:
-        raise HTTPException(status_code=404, detail=f"Subscription {subscription_id} not found")
+        raise APIError(404, "subscription_not_found", "Subscription not found")
     
     return subscription
 
@@ -415,12 +613,12 @@ async def get_subscription(subscription_id: str):
 async def get_merchants():
     """Get all merchants from dataset"""
     if MERCHANTS is None:
-        raise HTTPException(status_code=500, detail="Merchants data not loaded")
+        raise APIError(500, "dataset_not_loaded", "Merchants data not loaded")
     return MERCHANTS
 
 
 # Case analysis endpoint - main workflow
-@app.post("/cases/analyze")
+@app.post("/cases/analyze", response_model=CaseDetail)
 async def analyze_case(request: CaseAnalysisRequest):
     """
     Analyze a charge and run the ChargeGuard workflow.
@@ -439,20 +637,17 @@ async def analyze_case(request: CaseAnalysisRequest):
     
     try:
         if not transaction_exists(transaction_id):
-            raise HTTPException(
-                status_code=404,
-                detail=f"Transaction {transaction_id} not found",
-            )
+            raise APIError(404, "transaction_not_found", "Transaction not found")
 
         # Run the orchestrator (blocks until merchant decision)
         return process_transaction(transaction_id)
     
-    except HTTPException:
+    except APIError:
         raise
     except (StopIteration, ValueError) as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise APIError(404, "transaction_not_found", str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Case analysis failed: {str(e)}")
+        raise APIError(500, "case_processing_failed", f"Case analysis failed: {str(e)}")
 
 
 @app.post("/transactions/webhook", status_code=202)
@@ -518,14 +713,14 @@ async def get_event(event_id: str):
     return public_event(event)
 
 
-@app.get("/cases")
+@app.get("/cases", response_model=CaseListResponse)
 async def list_cases():
     """List cases created during the current backend process."""
-    return list(CASES.values())
+    return {"items": [summarize_case(case) for case in CASES.values()]}
 
 
 # Case status endpoint
-@app.get("/cases/{case_id}")
+@app.get("/cases/{case_id}", response_model=CaseDetail)
 async def get_case_status(case_id: str):
     """
     Get status of an existing case.
@@ -537,10 +732,10 @@ async def get_case_status(case_id: str):
     return require_case(case_id)
 
 
-@app.get("/decisions/pending")
+@app.get("/decisions/pending", response_model=PendingDecisionListResponse)
 async def list_pending_decisions():
     """List counter-offers waiting for the user."""
-    return list(PENDING_DECISIONS.values())
+    return {"items": list(PENDING_DECISIONS.values())}
 
 
 async def merchant_request(
@@ -609,16 +804,25 @@ def record_user_decision(
     request: DecisionResolutionRequest,
     merchant_response: dict,
 ) -> None:
-    negotiation = to_dict(case.get("negotiation")) or {}
-    negotiation.update(
+    case["merchant"] = {
+        "status": merchant_response.get("status"),
+        "offer": merchant_response.get("offer"),
+        "resolution": merchant_response.get("resolution"),
+    }
+    case["decision"] = {
+        "required": False,
+        "recommendation": request.decision,
+        "reason": request.reason,
+    }
+    case["updated_at"] = merchant_response.get("updated_at", case["updated_at"])
+    case["timeline"].append(
         {
-            "user_decision": request.decision,
-            "reason": request.reason,
-            "resolution": merchant_response.get("resolution"),
+            "at": case["updated_at"],
+            "actor": "user",
+            "event": "decision_resolved",
+            "detail": request.decision,
         }
     )
-    case["negotiation"] = negotiation
-    case["merchant_response"] = merchant_response
     PENDING_DECISIONS.pop(case["case_id"], None)
 
 
@@ -632,7 +836,7 @@ async def resolve_merchant_decision(
     }:
         raise APIError(400, "unsupported_decision", "Unsupported decision")
 
-    dispute_id = case.get("dispute_id")
+    dispute_id = case.get("dispute", {}).get("dispute_id") if case.get("dispute") else None
     if not dispute_id:
         raise APIError(409, "missing_dispute", "Case has no merchant dispute")
 
@@ -667,29 +871,38 @@ async def resolve_merchant_decision(
     record_user_decision(case, request, merchant_response)
 
     if status in TERMINAL_MERCHANT_STATUSES:
-        case["status"] = "completed"
+        case["status"] = "resolved"
         return case
 
     case["status"] = "awaiting_merchant"
     final_response = await wait_for_merchant_resolution(dispute_id)
     if final_response is None:
-        case["negotiation"]["polling_timed_out"] = True
         return case
 
-    case["merchant_response"] = final_response
-    case["negotiation"]["resolution"] = final_response.get("resolution")
-    case["negotiation"]["polling_timed_out"] = False
-    case["status"] = "completed"
+    case["merchant"] = {
+        "status": final_response.get("status"),
+        "offer": final_response.get("offer"),
+        "resolution": final_response.get("resolution"),
+    }
+    case["updated_at"] = final_response.get("updated_at", case["updated_at"])
+    case["status"] = "resolved"
     return case
 
 
-@app.post("/decisions/{case_id}/resolve")
+@app.post("/decisions/{case_id}/resolve", response_model=DecisionResolutionResponse)
 async def resolve_decision(
     case_id: str,
     request: DecisionResolutionRequest,
 ):
     """Apply the user's decision to the corresponding merchant dispute."""
-    return await resolve_merchant_decision(require_case(case_id), request)
+    case = await resolve_merchant_decision(require_case(case_id), request)
+    return {
+        "case_id": case["case_id"],
+        "decision": request.decision,
+        "case_status": case["status"],
+        "merchant_status": case["merchant"]["status"],
+        "resolution": case["merchant"]["resolution"],
+    }
 
 
 # Case decision endpoint

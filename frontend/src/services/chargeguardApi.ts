@@ -1,6 +1,6 @@
 import { env } from "@/config/env";
 import { createApiClient } from "@/services/apiClient";
-import type { BackendCase, Merchant, MerchantDispute, Subscription, Transaction } from "@/types/chargeguard";
+import type { BackendCase, CaseSummary, Merchant, MerchantDispute, Subscription, Transaction } from "@/types/chargeguard";
 
 const backendClient = createApiClient(env.backendApiUrl);
 const bankClient = createApiClient(env.mockBankApiUrl);
@@ -49,9 +49,16 @@ export const backendApi = {
   getMerchants: () => backendClient.get<Merchant[]>("/merchants"),
   getSubscriptions: () => backendClient.get<Subscription[]>("/subscriptions"),
   getTransactions: () => backendClient.get<Transaction[]>("/transactions"),
-  getCases: () => backendClient.get<BackendCase[]>("/cases"),
+  getCases: () => backendClient.get<{ items: CaseSummary[] }>("/cases"),
+  getCase: (case_id: string) => backendClient.get<BackendCase>(`/cases/${case_id}`),
   analyzeCase: (transaction_id: string) => backendClient.post<BackendCase>("/cases/analyze", { transaction_id }),
   resolveDecision: (case_id: string, decision: "accept_offer" | "reject_and_request_full_refund", reason?: string) =>
-    backendClient.post<BackendCase>(`/decisions/${case_id}/resolve`, { decision, reason }),
+    backendClient.post<{
+      case_id: string;
+      decision: "accept_offer" | "reject_and_request_full_refund";
+      case_status: string;
+      merchant_status: string | null;
+      resolution: MerchantDispute["resolution"];
+    }>(`/decisions/${case_id}/resolve`, { decision, reason }),
   resetDemo: () => backendClient.post<{ status: string; message: string }>("/demo/reset"),
 };

@@ -12,6 +12,8 @@ export type MerchantCategory =
 
 export type SubscriptionContractStatus = "active" | "cancelled";
 export type CaseStatus = "detected" | "investigating" | "dispute_filed" | "awaiting_merchant" | "awaiting_human" | "resolved" | "dismissed";
+export type BackendCaseStatus = "analyzed" | "awaiting_merchant" | "awaiting_human" | "resolved" | "dismissed" | "failed";
+export type BackendAnomalyType = "PRICE_INCREASE" | "DUPLICATE_CHARGE" | "POST_CANCELLATION" | "NONE";
 export type MerchantDisputeStatus =
   | "submitted"
   | "under_review"
@@ -60,7 +62,7 @@ export type Transaction = {
 
 export type CaseTimelineEvent = {
   at: string;
-  actor: "agent" | "merchant_api" | "user" | "system";
+  actor: "agent" | "chargeguard" | "merchant_api" | "user" | "system";
   event: string;
   detail: string;
 };
@@ -135,40 +137,50 @@ export type ActivityLog = {
 
 export type BackendCase = {
   case_id: string;
-  transaction_id: string;
-  charge_analysis: {
+  transaction: Pick<Transaction, "transaction_id" | "subscription_id" | "merchant_id" | "merchant_name" | "amount_usd" | "currency" | "posted_at" | "description">;
+  anomaly: {
     is_anomaly: boolean;
-    type: "PRICE_INCREASE" | "DUPLICATE_CHARGE" | "POST_CANCELLATION" | "NONE";
-    expected_amount: number;
-    actual_amount: number;
-    difference: number;
+    type: BackendAnomalyType;
+    expected_amount_usd: number;
+    actual_amount_usd: number;
+    claimed_amount_usd: number;
     confidence: number;
     reason: string;
-  } | null;
-  evidence: {
-    summary?: string;
-  } | null;
+  };
+  evidence: Array<{ type: string; uri: string | null; description: string }>;
   dispute: {
-    case_id: string;
-    merchant_id: string;
-    user_id: string;
-    transaction_id: string;
+    dispute_id: string | null;
     claim_type: Case["anomaly_type"];
     requested_amount_usd: number;
-    currency: string;
     message: string;
-    evidence: Array<{ type: string; uri: string | null; description: string }>;
   } | null;
-  merchant_response: MerchantDispute | null;
-  negotiation: {
-    recommendation?: string;
-    rationale?: string;
-    user_decision?: string;
-    resolution?: MerchantDispute["resolution"];
-    polling_timed_out?: boolean;
-  } | null;
-  status: "analyzed" | "awaiting_human" | "awaiting_merchant" | "completed";
-  dispute_id?: string | null;
+  merchant: {
+    status: MerchantDisputeStatus | null;
+    offer: MerchantOffer | null;
+    resolution: MerchantDispute["resolution"];
+  };
+  decision: {
+    required: boolean;
+    recommendation: "accept_offer" | "reject_and_request_full_refund" | null;
+    reason: string | null;
+  };
+  status: BackendCaseStatus;
+  timeline: CaseTimelineEvent[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type CaseSummary = {
+  case_id: string;
+  transaction_id: string;
+  merchant_id: string;
+  merchant_name: string;
+  anomaly_type: BackendAnomalyType;
+  claimed_amount_usd: number;
+  currency: "USD";
+  status: BackendCaseStatus;
+  created_at: string;
+  updated_at: string;
 };
 
 export type SubscriptionViewModel = {

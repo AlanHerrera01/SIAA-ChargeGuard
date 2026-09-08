@@ -19,7 +19,7 @@ type BackendSnapshot = {
   cases: BackendCase[];
 };
 
-const anomalyTypeMap: Record<NonNullable<BackendCase["charge_analysis"]>["type"], Case["anomaly_type"]> = {
+const anomalyTypeMap: Record<BackendCase["anomaly"]["type"], Case["anomaly_type"]> = {
   PRICE_INCREASE: "price_hike",
   DUPLICATE_CHARGE: "duplicate_charge",
   POST_CANCELLATION: "charge_after_cancellation",
@@ -30,12 +30,14 @@ const statusMap: Record<BackendCase["status"], Case["status"]> = {
   analyzed: "detected",
   awaiting_human: "awaiting_human",
   awaiting_merchant: "awaiting_merchant",
-  completed: "resolved",
+  resolved: "resolved",
+  dismissed: "dismissed",
+  failed: "dismissed",
 };
 
 export function adaptBackendData(snapshot: BackendSnapshot): ChargeGuardData {
-  const cases = snapshot.cases.map((backendCase) => adaptCase(backendCase, snapshot.transactions, snapshot.subscriptions));
-  const merchantDisputes = snapshot.cases.flatMap((backendCase) => (backendCase.merchant_response ? [backendCase.merchant_response] : []));
+  const cases = snapshot.cases.map((backendCase) => adaptCase(backendCase, snapshot.subscriptions));
+  const merchantDisputes = snapshot.cases.flatMap(adaptMerchantDispute);
   const decisions = snapshot.cases.flatMap(adaptDecision);
 
   return {
@@ -50,77 +52,57 @@ export function adaptBackendData(snapshot: BackendSnapshot): ChargeGuardData {
   };
 }
 
-function adaptCase(backendCase: BackendCase, transactions: Transaction[], subscriptions: Subscription[]): Case {
-  const transaction = transactions.find((item) => item.transaction_id === backendCase.transaction_id);
-  const subscription = transaction
-    ? subscriptions.find((item) => item.subscription_id === transaction.subscription_id)
-    : undefined;
-  const analysis = backendCase.charge_analysis;
+function adaptCase(backendCase: BackendCase, subscriptions: Subscription[]): Case {
+  const transaction = backendCase.transaction;
+  const subscription = subscriptions.find((item) => item.subscription_id === transaction.subscription_id);
+  const anomaly = backendCase.anomaly;
   const dispute = backendCase.dispute;
-  const merchantResponse = backendCase.merchant_response;
-  const createdAt = merchantResponse?.created_at ?? transaction?.posted_at ?? new Date().toISOString();
-  const updatedAt = merchantResponse?.updated_at ?? createdAt;
 
   return {
     case_id: backendCase.case_id,
-    user_id: dispute?.user_id ?? transaction?.user_id ?? "usr_demo",
-    subscription_id: transaction?.subscription_id ?? subscription?.subscription_id ?? "",
-    merchant_id: dispute?.merchant_id ?? transaction?.merchant_id ?? merchantResponse?.merchant_id ?? "",
-    transaction_id: backendCase.transaction_id,
-    anomaly_type: dispute?.claim_type ?? (analysis ? anomalyTypeMap[analysis.type] : "other"),
-    confidence: analysis?.confidence ?? 0,
-    claimed_amount_usd: dispute?.requested_amount_usd ?? analysis?.difference ?? merchantResponse?.requested_amount_usd ?? 0,
-    status: analysis?.is_anomaly === false ? "dismissed" : statusMap[backendCase.status],
-    dispute_id: backendCase.dispute_id ?? merchantResponse?.dispute_id ?? null,
-    created_at: createdAt,
-    updated_at: updatedAt,
-    timeline: [
-      {
-        at: transaction?.posted_at ?? createdAt,
-        actor: "agent",
-        event: "Detection",
-        detail: analysis?.reason ?? "Transaction analyzed by ChargeGuard.",
-      },
-      ...(backendCase.evidence?.summary
-        ? [
-            {
-              at: createdAt,
-              actor: "agent" as const,
-              event: "Evidence",
-              detail: backendCase.evidence.summary,
-            },
-          ]
-        : []),
-      ...(dispute
-        ? [
-            {
-              at: createdAt,
-              actor: "merchant_api" as const,
-              event: "Dispute filed",
-              detail: dispute.message,
-            },
-          ]
-        : []),
-      ...(merchantResponse
-        ? [
-            {
-              at: updatedAt,
-              actor: "merchant_api" as const,
-              event: "Merchant response",
-              detail: merchantResponse.offer?.message ?? merchantResponse.status,
-            },
-          ]
-        : []),
-    ],
+    user_id: subscription?.user_id ?? "usr_demo",
+    subscription_id: transaction.subscription_id,
+    merchant_id: transaction.merchant_id,
+    transaction_id: transaction.transaction_id,
+    anomaly_type: dispute?.claim_type ?? anomalyTypeMap[anomaly.type],
+    confidence: anomaly.confidence,
+    claimed_amount_usd: dispute?.requested_amount_usd ?? anomaly.claimed_amount_usd,
+    status: statusMap[backendCase.status],
+    dispute_id: dispute?.dispute_id ?? null,
+    created_at: backendCase.created_at,
+    updated_at: backendCase.updated_at,
+    timeline: backendCase.timeline,
   };
+}
+
+function adaptMerchantDispute(backendCase: BackendCase): MerchantDispute[] {
+  if (!backendCase.dispute?.dispute_id || !backendCase.merchant.status) return [];
+
+  return [
+    {
+      dispute_id: backendCase.dispute.dispute_id,
+      case_id: backendCase.case_id,
+      merchant_id: backendCase.transaction.merchant_id,
+      transaction_id: backendCase.transaction.transaction_id,
+      status: backendCase.merchant.status,
+      requested_amount_usd: backendCase.dispute.requested_amount_usd,
+      created_at: backendCase.created_at,
+      updated_at: backendCase.updated_at,
+      offer: backendCase.merchant.offer,
+      resolution: backendCase.merchant.resolution,
+      history: backendCase.timeline
+        .filter((event) => event.actor === "merchant_api")
+        .map((event) => ({ at: event.at, status: backendCase.merchant.status!, note: event.detail })),
+    },
+  ];
 }
 
 function adaptDecision(backendCase: BackendCase): Decision[] {
   if (backendCase.status !== "awaiting_human") return [];
 
-  const offer = backendCase.merchant_response?.offer;
-  const recommendation = backendCase.negotiation?.recommendation;
-  const rationale = backendCase.negotiation?.rationale;
+  const offer = backendCase.merchant.offer;
+  const recommendation = backendCase.decision.recommendation;
+  const rationale = backendCase.decision.reason;
 
   return [
     {
@@ -134,7 +116,7 @@ function adaptDecision(backendCase: BackendCase): Decision[] {
       ],
       status: "pending",
       chosen_option_id: null,
-      created_at: backendCase.merchant_response?.updated_at ?? new Date().toISOString(),
+      created_at: backendCase.updated_at,
       resolved_at: null,
     },
   ];
@@ -159,7 +141,7 @@ function buildMetrics(subscriptions: Subscription[], cases: Case[], disputes: Me
 function buildActivity(cases: BackendCase[]): ActivityLog[] {
   return cases.slice(-6).reverse().map((backendCase) => ({
     id: `log_${backendCase.case_id}`,
-    message: backendCase.charge_analysis?.reason ?? `Case ${backendCase.case_id} processed by ChargeGuard.`,
-    timestamp: backendCase.merchant_response?.updated_at ?? new Date().toISOString(),
+    message: backendCase.anomaly.reason ?? `Case ${backendCase.case_id} processed by ChargeGuard.`,
+    timestamp: backendCase.updated_at,
   }));
 }
