@@ -36,6 +36,7 @@ from backend.schemas import (
     DecisionResolutionResponse,
     PendingDecisionListResponse,
 )
+from backend.storage import create_state_stores
 
 
 logger = logging.getLogger(__name__)
@@ -125,9 +126,7 @@ class DecisionResolutionRequest(BaseModel):
 TRANSACTIONS = None
 SUBSCRIPTIONS = None
 MERCHANTS = None
-CASES: dict[str, dict] = {}
-PENDING_DECISIONS: dict[str, dict] = {}
-EVENTS: dict[str, dict] = {}
+CASES, PENDING_DECISIONS, EVENTS = create_state_stores()
 TERMINAL_MERCHANT_STATUSES = {
     "resolved_accepted",
     "resolved_full",
@@ -472,7 +471,6 @@ def serialize_case(transaction_id: str, result: dict) -> dict:
         created_at=created_at,
         updated_at=updated_at,
     ).model_dump(mode="json")
-    CASES[case_id] = case
     if status == "awaiting_human":
         offer = merchant_response.get("offer") if merchant_response else None
         PENDING_DECISIONS[case_id] = {
@@ -486,6 +484,7 @@ def serialize_case(transaction_id: str, result: dict) -> dict:
             "reason": reason or "The evidence supports the full refund.",
             "status": "pending",
         }
+    CASES[case_id] = case
     return case
 
 
@@ -502,6 +501,7 @@ def process_event(event_id: str) -> None:
         return
 
     event["status"] = "processing"
+    EVENTS[event_id] = event
     try:
         case = process_transaction(event["transaction_id"])
     except Exception:
@@ -511,10 +511,12 @@ def process_event(event_id: str) -> None:
             "case_processing_failed",
             "Transaction analysis could not be completed",
         )["error"]
+        EVENTS[event_id] = event
         return
 
     event["status"] = "completed"
     event["case_id"] = case["case_id"]
+    EVENTS[event_id] = event
 
 
 def require_case(case_id: str) -> dict:
@@ -674,7 +676,7 @@ async def transaction_webhook(
             "duplicate": True,
         }
 
-    EVENTS[request.event_id] = {
+    new_event = {
         "event_id": request.event_id,
         "event_type": request.event_type,
         "occurred_at": request.occurred_at,
@@ -683,7 +685,21 @@ async def transaction_webhook(
         "case_id": None,
         "error": None,
         "payload": payload,
+        "created_at": request.occurred_at,
     }
+    put_if_absent = getattr(EVENTS, "put_if_absent", None)
+    if put_if_absent and not put_if_absent(request.event_id, new_event):
+        existing = EVENTS.get(request.event_id)
+        if existing and existing["payload"] != payload:
+            raise APIError(409, "event_payload_conflict", "Event ID already used")
+        return {
+            "status": existing["status"],
+            "event_id": request.event_id,
+            "transaction_id": request.data.transaction_id,
+            "duplicate": True,
+        }
+    if not put_if_absent:
+        EVENTS[request.event_id] = new_event
     background_tasks.add_task(process_event, request.event_id)
     return {
         "status": "accepted",
@@ -696,7 +712,7 @@ async def transaction_webhook(
 
 @app.get("/events")
 async def list_events():
-    """List bank events received during the current backend process."""
+    """List bank events received by the backend."""
     return [public_event(event) for event in EVENTS.values()]
 
 
@@ -715,20 +731,14 @@ async def get_event(event_id: str):
 
 @app.get("/cases", response_model=CaseListResponse)
 async def list_cases():
-    """List cases created during the current backend process."""
+    """List cases created by the backend."""
     return {"items": [summarize_case(case) for case in CASES.values()]}
 
 
 # Case status endpoint
 @app.get("/cases/{case_id}", response_model=CaseDetail)
 async def get_case_status(case_id: str):
-    """
-    Get status of an existing case.
-    
-    Note: For hackathon MVP, we don't have persistent storage yet.
-    Cases only exist during the synchronous analysis call.
-    Future: integrate with DynamoDB for persistence.
-    """
+    """Get status of an existing case."""
     return require_case(case_id)
 
 
@@ -824,6 +834,7 @@ def record_user_decision(
         }
     )
     PENDING_DECISIONS.pop(case["case_id"], None)
+    CASES[case["case_id"]] = case
 
 
 async def resolve_merchant_decision(
@@ -872,9 +883,11 @@ async def resolve_merchant_decision(
 
     if status in TERMINAL_MERCHANT_STATUSES:
         case["status"] = "resolved"
+        CASES[case["case_id"]] = case
         return case
 
     case["status"] = "awaiting_merchant"
+    CASES[case["case_id"]] = case
     final_response = await wait_for_merchant_resolution(dispute_id)
     if final_response is None:
         return case
@@ -886,6 +899,7 @@ async def resolve_merchant_decision(
     }
     case["updated_at"] = final_response.get("updated_at", case["updated_at"])
     case["status"] = "resolved"
+    CASES[case["case_id"]] = case
     return case
 
 
@@ -922,7 +936,7 @@ async def submit_case_decision(case_id: str, request: CaseDecisionRequest):
 
 @app.post("/demo/reset")
 async def reset_demo():
-    """Clear in-memory workflow state and reload the synthetic datasets."""
+    """Clear workflow state and reload the synthetic datasets."""
     CASES.clear()
     PENDING_DECISIONS.clear()
     EVENTS.clear()
@@ -940,6 +954,16 @@ async def startup_event():
     load_datasets()
     print("✅ ChargeGuard Backend API started")
     print("📊 Datasets loaded successfully")
+
+
+try:
+    from mangum import Mangum
+except ImportError:
+    if os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+        raise RuntimeError("Mangum is required when running in AWS Lambda")
+    handler = None
+else:
+    handler = Mangum(app)
 
 
 # Root endpoint

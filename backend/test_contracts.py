@@ -126,8 +126,8 @@ async def test_case_list_and_pending_decisions_use_items(monkeypatch):
     assert cases["items"][0] == {
         "case_id": "case_contract_test",
         "transaction_id": "txn_0031",
-        "merchant_id": "mrc_spotify",
-        "merchant_name": "Spotify",
+        "merchant_id": "mrc_netflix",
+        "merchant_name": "Netflix",
         "anomaly_type": "PRICE_INCREASE",
         "claimed_amount_usd": 4.0,
         "currency": "USD",
