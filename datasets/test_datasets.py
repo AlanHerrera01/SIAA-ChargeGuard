@@ -22,6 +22,7 @@ ANOMALY_KEYS = {
     "delta_usd",
     "notice_given",
     "expected_claim_amount_usd",
+    "previous_transaction_id",
 }
 
 
@@ -55,7 +56,9 @@ def test_dataset_counts_and_references() -> None:
     subscriptions = _load_json("subscriptions.json")
     transactions = _load_json("transactions.json")
     anomalies = _load_json("ground_truth.json")["anomalies"]
-    transaction_ids = {transaction["transaction_id"] for transaction in transactions}
+    transactions_by_id = {
+        transaction["transaction_id"]: transaction for transaction in transactions
+    }
 
     assert len(merchants) == 10
     assert len(subscriptions) == 6
@@ -67,7 +70,25 @@ def test_dataset_counts_and_references() -> None:
         "anm_002",
         "anm_003",
     }
-    assert all(anomaly["transaction_id"] in transaction_ids for anomaly in anomalies)
+    for anomaly in anomalies:
+        assert anomaly["transaction_id"] in transactions_by_id
+        transaction = transactions_by_id[anomaly["transaction_id"]]
+        assert anomaly["actual_amount_usd"] == transaction["amount_usd"]
+        assert anomaly["expected_claim_amount_usd"] == anomaly["delta_usd"]
+
+        previous_transaction_id = anomaly.get("previous_transaction_id")
+        if previous_transaction_id is not None:
+            assert anomaly["type"] == "duplicate_charge"
+            assert previous_transaction_id in transactions_by_id
+            previous = transactions_by_id[previous_transaction_id]
+            assert previous["subscription_id"] == transaction["subscription_id"]
+            assert previous["merchant_id"] == transaction["merchant_id"]
+            assert previous["amount_usd"] == transaction["amount_usd"]
+            assert anomaly["expected_amount_usd"] == previous["amount_usd"]
+            assert previous["posted_at"] < transaction["posted_at"]
+
+        if anomaly["type"] == "charge_after_cancellation":
+            assert anomaly["expected_amount_usd"] == 0
 
 
 def test_transactions_never_expose_ground_truth() -> None:
@@ -131,9 +152,20 @@ def test_exact_anomaly_scenarios_and_evidence() -> None:
         "expected_claim_amount_usd": 4.5,
     }
     assert transactions["txn_0031"]["amount_usd"] == 19.99
+    previous_price = max(
+        (
+            transaction
+            for transaction in transactions.values()
+            if transaction["subscription_id"] == price_hike["subscription_id"]
+            and transaction["posted_at"] < transactions["txn_0031"]["posted_at"]
+        ),
+        key=lambda transaction: transaction["posted_at"],
+    )
+    assert previous_price["amount_usd"] == price_hike["expected_amount_usd"]
 
     duplicate = anomalies["anm_002"]
     duplicate_transaction = transactions[duplicate["transaction_id"]]
+    previous_duplicate_transaction = transactions[duplicate["previous_transaction_id"]]
     same_charge = [
         transaction
         for transaction in transactions.values()
@@ -142,6 +174,10 @@ def test_exact_anomaly_scenarios_and_evidence() -> None:
         and transaction["amount_usd"] == duplicate_transaction["amount_usd"]
     ]
     assert len(same_charge) == 2
+    assert previous_duplicate_transaction in same_charge
+    assert duplicate_transaction in same_charge
+    assert duplicate["previous_transaction_id"] == "txn_0034"
+    assert duplicate["expected_amount_usd"] == previous_duplicate_transaction["amount_usd"]
     assert duplicate["expected_claim_amount_usd"] == duplicate_transaction["amount_usd"]
 
     cancelled = anomalies["anm_003"]

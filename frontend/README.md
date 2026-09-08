@@ -17,3 +17,30 @@ cd frontend
 npm install
 npm run dev
 ```
+
+## Docker
+
+The repository `docker-compose.yml` builds this app as a production static
+bundle served by Nginx:
+
+```bash
+docker compose --profile app up --build frontend
+```
+
+The container listens on port `8080`; compose publishes it at
+`http://localhost:5173`.
+
+## Environment
+
+Copy `frontend/.env.example` to `frontend/.env.local` for local frontend settings.
+
+```bash
+VITE_CHARGEGUARD_DATA_SOURCE=api
+VITE_BACKEND_API_URL=http://localhost:8000
+VITE_MOCK_BANK_API_URL=http://localhost:8001
+VITE_MOCK_MERCHANT_API_URL=http://localhost:8002
+VITE_DEMO_USER_ID=usr_demo
+VITE_DEFAULT_CASE_ID=case_spotify_001
+```
+
+Use `VITE_CHARGEGUARD_DATA_SOURCE=mock` only when you need the static demo fallback without the backend.

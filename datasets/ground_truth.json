@@ -15,8 +15,9 @@
       "anomaly_id": "anm_002",
       "type": "duplicate_charge",
       "transaction_id": "txn_0035",
+      "previous_transaction_id": "txn_0034",
       "subscription_id": "sub_003",
-      "expected_amount_usd": 0.0,
+      "expected_amount_usd": 10.99,
       "actual_amount_usd": 10.99,
       "delta_usd": 10.99,
       "expected_claim_amount_usd": 10.99
