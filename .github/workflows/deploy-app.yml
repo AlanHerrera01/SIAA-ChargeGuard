@@ -69,71 +69,12 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Package and Deploy Lambda Code
+      - name: Package and Deploy Backend Lambda
         run: |
-          set -euo pipefail
-
-          if [ ! -f "backend/main.py" ]; then
-            echo "No backend/main.py yet; skipping Lambda deployment."
-            exit 0
-          fi
-
-          # backend/main.py derives project_root from its own parent's parent and
-          # loads agents/, config.py and datasets/ relative to it, so the zip has to
-          # mirror the repo layout. Flattening backend/* into the root breaks all three.
-          for required in agents config.py datasets backend/requirements.txt; do
-            if [ ! -e "$required" ]; then
-              echo "::error::Missing $required, which backend/main.py imports or reads at runtime."
-              echo "::error::The function would deploy successfully and then fail on its first invocation."
-              exit 1
-            fi
-          done
-
-          # Parsed rather than grepped: the assignment legitimately sits inside a
-          # try/except that falls back to handler = None outside Lambda, which an
-          # anchored pattern would miss.
-          if ! python - <<'PY'
-          import ast, sys
-
-          def assigns_handler(body):
-              for node in body:
-                  if isinstance(node, ast.Assign) and any(
-                      isinstance(t, ast.Name) and t.id == "handler" for t in node.targets
-                  ):
-                      return True
-                  blocks = [getattr(node, attr, []) for attr in ("body", "orelse", "finalbody")]
-                  blocks += [h.body for h in getattr(node, "handlers", [])]
-                  if isinstance(node, (ast.Try, ast.If)) and any(assigns_handler(b) for b in blocks):
-                      return True
-              return False
-
-          sys.exit(0 if assigns_handler(ast.parse(open("backend/main.py").read()).body) else 1)
-          PY
-          then
-            echo "::error::backend/main.py assigns no module-level 'handler'."
-            echo "::error::FastAPI is an ASGI app; Lambda needs an adapter. Add 'mangum' to"
-            echo "::error::backend/requirements.txt and, at module level in backend/main.py:"
-            echo "::error::    from mangum import Mangum"
-            echo "::error::    handler = Mangum(app)"
-            echo "::error::Without it every request through API Gateway returns 502."
-            exit 1
-          fi
-
-          mkdir -p build_pkg
-          pip install --quiet -r backend/requirements.txt -t build_pkg/
-          cp -r backend agents config.py datasets build_pkg/
-
-          cd build_pkg && zip -qr ../backend_deploy.zip . && cd ..
-          echo "Package size: $(du -h backend_deploy.zip | cut -f1)"
-
-          aws lambda update-function-code \
-            --function-name chargeguard-backend \
-            --zip-file fileb://backend_deploy.zip \
-            --no-cli-pager
-          aws lambda wait function-updated --function-name chargeguard-backend
+          python scripts/package_lambdas.py --component backend --upload
 
   deploy-frontend:
-    name: Trigger Amplify Frontend Build
+    name: Build & Deploy Frontend to Amplify
     needs: filter
     if: ${{ needs.filter.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
@@ -141,6 +82,16 @@ jobs:
       id-token: write
       contents: read
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Configure AWS Credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -148,14 +99,40 @@ jobs:
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
           audience: sts.amazonaws.com
 
-      - name: Trigger Amplify Release Job
+      - name: Build and Deploy to Amplify
+        env:
+          AMPLIFY_APP_ID: ${{ vars.AMPLIFY_APP_ID }}
+          VITE_BACKEND_API_URL: ${{ vars.API_GATEWAY_URL }}
+          VITE_MOCK_BANK_API_URL: ${{ vars.API_GATEWAY_URL }}/mock/bank
+          VITE_MOCK_MERCHANT_API_URL: ${{ vars.API_GATEWAY_URL }}/mock/merchant
+          VITE_CHARGEGUARD_DATA_SOURCE: api
+          VITE_DEMO_USER_ID: usr_demo
+          VITE_DEFAULT_CASE_ID: case_spotify_001
         run: |
-          if [ -n "${{ vars.AMPLIFY_APP_ID }}" ]; then
-            echo "Triggering Amplify build job for app ${{ vars.AMPLIFY_APP_ID }}..."
-            aws amplify start-job \
-              --app-id "${{ vars.AMPLIFY_APP_ID }}" \
-              --branch-name main \
-              --job-type RELEASE
-          else
-            echo "vars.AMPLIFY_APP_ID is not configured in repository variables; skipping Amplify trigger."
+          set -euo pipefail
+          if [ -z "$AMPLIFY_APP_ID" ]; then
+            echo "::error::vars.AMPLIFY_APP_ID is not configured in repository variables."
+            exit 1
           fi
+
+          echo "Building frontend with Vite..."
+          cd frontend
+          npm ci
+          npm run build
+
+          echo "Packaging frontend distribution..."
+          cd dist
+          zip -qr ../frontend_dist.zip .
+          cd ..
+
+          echo "Creating Amplify deployment..."
+          DEPLOY_INFO=$(aws amplify create-deployment --app-id "$AMPLIFY_APP_ID" --branch-name main --no-cli-pager)
+          UPLOAD_URL=$(echo "$DEPLOY_INFO" | jq -r .zipUploadUrl)
+          JOB_ID=$(echo "$DEPLOY_INFO" | jq -r .jobId)
+
+          echo "Uploading zip artifact to Amplify upload URL..."
+          curl -sS -T frontend_dist.zip "$UPLOAD_URL"
+
+          echo "Starting Amplify deployment (jobId=$JOB_ID)..."
+          aws amplify start-deployment --app-id "$AMPLIFY_APP_ID" --branch-name main --job-id "$JOB_ID" --no-cli-pager
+          echo "Amplify deployment initiated successfully."

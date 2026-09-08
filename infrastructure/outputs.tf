@@ -59,3 +59,22 @@ output "amplify" {
     frontend_url   = module.amplify.frontend_url
   }
 }
+
+output "mock_endpoints" {
+  description = "Public URLs for simulated external systems (Mock Bank & Mock Merchant)"
+  value = {
+    bank     = module.lambda_api.mock_bank_url
+    merchant = module.lambda_api.mock_merchant_url
+  }
+}
+
+output "cloudwatch_dashboard_name" {
+  description = "Name of the CloudWatch dashboard"
+  value       = module.cloudwatch.dashboard_name
+}
+
+output "aws_budget_name" {
+  description = "Name of the AWS budget"
+  value       = module.budget.budget_name
+}
+

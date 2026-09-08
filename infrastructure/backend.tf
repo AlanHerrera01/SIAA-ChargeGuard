@@ -12,10 +12,7 @@
 #    s3 a continuación y ejecute:
 #      terraform init -backend-config=backend.hcl -migrate-state
 
-# terraform {
-#   backend "s3" {
-#     key     = "dev/terraform.tfstate"
-#     region  = "us-east-1"
-#     encrypt = true
-#   }
-# }
+terraform {
+  backend "s3" {}
+}
+

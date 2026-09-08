@@ -1,9 +1,7 @@
 resource "aws_amplify_app" "frontend" {
-  name         = "chargeguard-frontend"
-  repository   = "https://github.com/${var.github_repo}"
-  access_token = var.github_access_token
-  platform     = "WEB"
-  description  = "ChargeGuard Everyday Autonomous Subscription Dispute Agent Frontend"
+  name        = "chargeguard-frontend"
+  platform    = "WEB"
+  description = "ChargeGuard Everyday Autonomous Subscription Dispute Agent Frontend"
 
   build_spec = <<-EOT
     version: 1
@@ -26,7 +24,12 @@ resource "aws_amplify_app" "frontend" {
   EOT
 
   environment_variables = {
-    VITE_API_URL = var.api_gateway_url
+    VITE_BACKEND_API_URL         = var.api_gateway_url
+    VITE_MOCK_BANK_API_URL       = "${var.api_gateway_url}/mock/bank"
+    VITE_MOCK_MERCHANT_API_URL   = "${var.api_gateway_url}/mock/merchant"
+    VITE_CHARGEGUARD_DATA_SOURCE = "api"
+    VITE_DEMO_USER_ID            = "usr_demo"
+    VITE_DEFAULT_CASE_ID         = "case_spotify_001"
   }
 
   custom_rule {

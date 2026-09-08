@@ -51,6 +51,8 @@ frontend/build/
 # ==============================
 *.tfstate
 *.tfstate.*
+*.tfvars
+!*.tfvars.example
 .terraform/
 # Provider lock files are committed so local and CI runs use identical versions.
 crash.log
@@ -81,6 +83,7 @@ desktop.ini
 logs/
 tmp/
 temp/
+scratch/
 
 # ==============================
 # AWS SAM / CDK

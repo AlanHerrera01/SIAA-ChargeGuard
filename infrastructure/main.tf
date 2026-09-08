@@ -55,10 +55,8 @@ module "eventbridge" {
 module "amplify" {
   source = "./modules/amplify"
 
-  github_repo         = var.github_repo
-  github_access_token = var.github_access_token
-  branch_name         = var.amplify_branch
-  api_gateway_url     = module.lambda_api.api_gateway_endpoint
+  branch_name     = var.amplify_branch
+  api_gateway_url = module.lambda_api.api_gateway_endpoint
 }
 
 # 7. AgentCore: Architectural preparation and dedicated CloudWatch log group
@@ -67,4 +65,24 @@ module "agentcore" {
 
   environment        = var.environment
   agentcore_role_arn = module.iam.agentcore_role_arn
+}
+
+# 8. CloudWatch: Observability dashboard for Lambda, API Gateway, and Bedrock metrics
+module "cloudwatch" {
+  source = "./modules/cloudwatch"
+
+  aws_region                  = var.aws_region
+  backend_function_name       = module.lambda_api.lambda_function_name
+  mock_bank_function_name     = module.lambda_api.mock_bank_function_name
+  mock_merchant_function_name = module.lambda_api.mock_merchant_function_name
+  api_gateway_name            = module.lambda_api.api_gateway_id
+  bedrock_model_id            = var.bedrock_model_id
+}
+
+# 9. AWS Budget: $40 USD monthly limit with 50% and 80% email alerts
+module "budget" {
+  source = "./modules/budget"
+
+  budget_limit_usd  = var.budget_limit_usd
+  subscriber_emails = var.budget_subscriber_emails
 }
