@@ -50,7 +50,12 @@ def deploy():
     print(f"Deployment created: Job {job_id}")
 
     print("Uploading zip package...")
-    resp = httpx.put(upload_url, content=zip_bytes, headers={"Content-Type": "application/zip"}, timeout=60.0)
+    resp = httpx.put(
+        upload_url,
+        content=zip_bytes,
+        headers={"Content-Type": "application/zip"},
+        timeout=60.0,
+    )
     resp.raise_for_status()
     print("Upload completed successfully.")
 

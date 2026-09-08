@@ -245,10 +245,13 @@ class MerchantDisputeDynamoStore:
     def __init__(self, table_name: str) -> None:
         import boto3
 
-        endpoint_url = os.getenv("DYNAMODB_ENDPOINT_URL") or os.getenv("DYNAMODB_ENDPOINT")
+        endpoint_url = os.getenv("DYNAMODB_ENDPOINT_URL") or os.getenv(
+            "DYNAMODB_ENDPOINT"
+        )
         self.table = boto3.resource(
             "dynamodb",
-            region_name=os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+            region_name=os.getenv("AWS_REGION")
+            or os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
             endpoint_url=endpoint_url,
         ).Table(table_name)
         self.record_type = "merchant_dispute"
@@ -323,7 +326,9 @@ class MerchantDisputeDynamoStore:
             "created_at": record.created_at.isoformat(),
             "delay_factor": record.delay_factor,
             "decision": record.decision,
-            "decision_at": record.decision_at.isoformat() if record.decision_at else None,
+            "decision_at": record.decision_at.isoformat()
+            if record.decision_at
+            else None,
             "reason": record.reason,
         }
 
@@ -336,7 +341,9 @@ class MerchantDisputeDynamoStore:
             created_at=datetime.fromisoformat(d["created_at"]),
             delay_factor=d["delay_factor"],
             decision=d.get("decision"),
-            decision_at=datetime.fromisoformat(d["decision_at"]) if d.get("decision_at") else None,
+            decision_at=datetime.fromisoformat(d["decision_at"])
+            if d.get("decision_at")
+            else None,
             reason=d.get("reason", ""),
         )
 

@@ -25,12 +25,16 @@ def run_cmd(cmd: list[str], cwd: Path | None = None) -> None:
     print(f"Running: {' '.join(str(c) for c in cmd)}")
     result = subprocess.run(cmd, cwd=cwd or ROOT, check=False)
     if result.returncode != 0:
-        raise RuntimeError(f"Command failed with exit code {result.returncode}: {' '.join(str(c) for c in cmd)}")
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}: {' '.join(str(c) for c in cmd)}"
+        )
 
 
 def has_docker() -> bool:
     try:
-        res = subprocess.run(["docker", "info"], capture_output=True, text=True, check=False)
+        res = subprocess.run(
+            ["docker", "info"], capture_output=True, text=True, check=False
+        )
         return res.returncode == 0
     except Exception:
         return False
@@ -39,7 +43,9 @@ def has_docker() -> bool:
 def install_requirements(req_file: Path, target_dir: Path, use_docker: bool) -> None:
     target_dir.mkdir(parents=True, exist_ok=True)
     if use_docker:
-        print(f"Building dependencies in Linux container using Docker for {req_file}...")
+        print(
+            f"Building dependencies in Linux container using Docker for {req_file}..."
+        )
         # Mount repo root as /workspace and target_dir as /target
         req_rel = req_file.relative_to(ROOT).as_posix()
         target_rel = target_dir.relative_to(ROOT).as_posix()
@@ -73,10 +79,13 @@ def install_requirements(req_file: Path, target_dir: Path, use_docker: bool) -> 
         ]
         if platform.system() == "Windows":
             # On Windows without Docker, attempt manylinux binary wheel download if possible
-            pip_cmd.extend([
-                "--platform", "manylinux2014_x86_64",
-                "--only-binary=:all:",
-            ])
+            pip_cmd.extend(
+                [
+                    "--platform",
+                    "manylinux2014_x86_64",
+                    "--only-binary=:all:",
+                ]
+            )
         run_cmd(pip_cmd)
 
 
@@ -86,7 +95,9 @@ def create_zip(source_dir: Path, output_zip: Path) -> None:
     with zipfile.ZipFile(output_zip, "w", zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk(source_dir):
             # Skip __pycache__ and git metadata
-            dirs[:] = [d for d in dirs if d not in ("__pycache__", ".git", ".pytest_cache")]
+            dirs[:] = [
+                d for d in dirs if d not in ("__pycache__", ".git", ".pytest_cache")
+            ]
             for file in files:
                 if file.endswith((".pyc", ".pyo")):
                     continue
@@ -102,7 +113,12 @@ def copy_tree(src: Path, dst: Path) -> None:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
     elif src.is_dir():
-        shutil.copytree(src, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        shutil.copytree(
+            src,
+            dst,
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
 
 
 def package_backend(output_zip: Path, use_docker: bool) -> None:
@@ -113,7 +129,9 @@ def package_backend(output_zip: Path, use_docker: bool) -> None:
     build_dir.mkdir(parents=True)
 
     try:
-        install_requirements(ROOT / "backend" / "requirements.txt", build_dir, use_docker)
+        install_requirements(
+            ROOT / "backend" / "requirements.txt", build_dir, use_docker
+        )
         copy_tree(ROOT / "backend", build_dir / "backend")
         copy_tree(ROOT / "agents", build_dir / "agents")
         copy_tree(ROOT / "config.py", build_dir / "config.py")
@@ -131,7 +149,9 @@ def package_bank(output_zip: Path, use_docker: bool) -> None:
     build_dir.mkdir(parents=True)
 
     try:
-        install_requirements(ROOT / "mock-services" / "bank" / "requirements.txt", build_dir, use_docker)
+        install_requirements(
+            ROOT / "mock-services" / "bank" / "requirements.txt", build_dir, use_docker
+        )
         copy_tree(ROOT / "mock-services" / "bank", build_dir)
         copy_tree(ROOT / "datasets", build_dir / "datasets")
         create_zip(build_dir, output_zip)
@@ -147,7 +167,11 @@ def package_merchant(output_zip: Path, use_docker: bool) -> None:
     build_dir.mkdir(parents=True)
 
     try:
-        install_requirements(ROOT / "mock-services" / "merchant" / "requirements.txt", build_dir, use_docker)
+        install_requirements(
+            ROOT / "mock-services" / "merchant" / "requirements.txt",
+            build_dir,
+            use_docker,
+        )
         copy_tree(ROOT / "mock-services" / "merchant", build_dir)
         copy_tree(ROOT / "datasets", build_dir / "datasets")
         create_zip(build_dir, output_zip)
@@ -157,30 +181,36 @@ def package_merchant(output_zip: Path, use_docker: bool) -> None:
 
 def deploy_lambda(function_name: str, zip_path: Path) -> None:
     print(f"Deploying {zip_path.name} to Lambda function {function_name}...")
-    run_cmd([
-        "aws",
-        "lambda",
-        "update-function-code",
-        "--function-name",
-        function_name,
-        "--zip-file",
-        f"fileb://{zip_path.resolve().as_posix()}",
-        "--no-cli-pager",
-    ])
+    run_cmd(
+        [
+            "aws",
+            "lambda",
+            "update-function-code",
+            "--function-name",
+            function_name,
+            "--zip-file",
+            f"fileb://{zip_path.resolve().as_posix()}",
+            "--no-cli-pager",
+        ]
+    )
     print(f"Waiting for function {function_name} update to complete...")
-    run_cmd([
-        "aws",
-        "lambda",
-        "wait",
-        "function-updated",
-        "--function-name",
-        function_name,
-    ])
+    run_cmd(
+        [
+            "aws",
+            "lambda",
+            "wait",
+            "function-updated",
+            "--function-name",
+            function_name,
+        ]
+    )
     print(f"Lambda {function_name} successfully updated.")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Package and deploy ChargeGuard Lambdas.")
+    parser = argparse.ArgumentParser(
+        description="Package and deploy ChargeGuard Lambdas."
+    )
     parser.add_argument(
         "--component",
         choices=["backend", "bank", "merchant", "all"],
@@ -205,7 +235,9 @@ def main():
     )
     args = parser.parse_args()
 
-    use_docker = has_docker() and not args.force_pip and (platform.system() == "Windows")
+    use_docker = (
+        has_docker() and not args.force_pip and (platform.system() == "Windows")
+    )
     print(f"Packaging environment: OS={platform.system()}, Docker={use_docker}")
 
     artifacts = {}

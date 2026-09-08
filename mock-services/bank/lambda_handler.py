@@ -7,6 +7,7 @@ from mangum import Mangum
 
 from api import create_app
 
+
 class StripPrefixMiddleware:
     def __init__(self, app: ASGIApp, prefix: str) -> None:
         self.app = app
@@ -18,14 +19,14 @@ class StripPrefixMiddleware:
             if path == self.prefix:
                 scope["path"] = "/"
             elif path.startswith(self.prefix + "/"):
-                scope["path"] = path[len(self.prefix):]
+                scope["path"] = path[len(self.prefix) :]
             raw_path = scope.get("raw_path")
             if raw_path:
                 prefix_bytes = self.prefix.encode("ascii")
                 if raw_path == prefix_bytes:
                     scope["raw_path"] = b"/"
                 elif raw_path.startswith(prefix_bytes + b"/"):
-                    scope["raw_path"] = raw_path[len(prefix_bytes):]
+                    scope["raw_path"] = raw_path[len(prefix_bytes) :]
         await self.app(scope, receive, send)
 
 
