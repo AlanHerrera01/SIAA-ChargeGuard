@@ -17,6 +17,7 @@ MERCHANT_API_URL = os.getenv(
     "MERCHANT_API_URL",
     "http://127.0.0.1:8002",
 )
+MERCHANT_DEMO_SPEED = os.getenv("MERCHANT_DEMO_SPEED", "")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -31,9 +32,14 @@ def map_claim_type(anomaly_type: str) -> str:
 
 
 def submit_dispute(dispute):
+    headers = {}
+    if MERCHANT_DEMO_SPEED:
+        headers["X-Demo-Speed"] = MERCHANT_DEMO_SPEED
+
     response = httpx.post(
         f"{MERCHANT_API_URL}/disputes",
         json=dispute.model_dump(),
+        headers=headers,
         timeout=10.0,
     )
 
@@ -55,8 +61,8 @@ def get_dispute(dispute_id: str):
 
 def wait_for_merchant_response(
     dispute_id: str,
-    max_attempts: int = 10,
-    interval_seconds: int = 1,
+    max_attempts: int = 60,
+    interval_seconds: float = 0.2,
 ):
     for _ in range(max_attempts):
         dispute = get_dispute(dispute_id)

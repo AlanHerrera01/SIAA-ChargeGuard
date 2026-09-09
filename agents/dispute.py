@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel
 from strands import Agent
 
-from config import MODEL_ID
+from config import MODEL_ID_FAST
 
 
 class EvidenceItem(BaseModel):
@@ -87,7 +87,7 @@ dispute_agent = Agent(
         "Writes professional billing dispute messages using validated "
         "anomaly analysis, refund amounts and supporting evidence."
     ),
-    model=MODEL_ID,
+    model=MODEL_ID_FAST,
     system_prompt=SYSTEM_PROMPT,
     callback_handler=None,
 )
