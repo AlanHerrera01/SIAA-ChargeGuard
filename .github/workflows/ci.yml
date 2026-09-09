@@ -33,6 +33,9 @@ jobs:
         with:
           filters: |
             python:
+              - 'agents/**'
+              - 'backend/**'
+              - 'config.py'
               - 'datasets/**'
               - 'mock-services/**'
               - 'scripts/**'

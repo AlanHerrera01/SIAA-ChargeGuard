@@ -38,8 +38,9 @@
 Ejecutar en terminal antes de presentar o grabar:
 ```bash
 # 1. Calentamiento OBLIGATORIO de Lambda (2x GET /health para asegurar contenedor caliente)
-# Medición de cold start: 2.4 - 3.2s. Si el contenedor está frío, este retraso sumado al
-# pipeline de agentes puede rozar o superar el límite duro de 29-30s de API Gateway (HTTP 504).
+# Medición real de latencia: el pipeline tarda 22.5s con la Lambda caliente, lo que deja 7.5s
+# de margen frente al límite duro de 29-30s de API Gateway. Con cold start (+2.4 - 3.2s)
+# sube a ~25.5s, que sigue bajo el límite — por eso el calentamiento es obligatorio y no opcional.
 curl -sI https://6zx34nx8v7.execute-api.us-east-1.amazonaws.com/health | grep -E "HTTP|200"
 curl -sI https://6zx34nx8v7.execute-api.us-east-1.amazonaws.com/health | grep -E "HTTP|200"
 
@@ -70,7 +71,7 @@ for path in ['/mock/bank/demo/reset', '/mock/merchant/demo/reset']:
 | Síntoma Observado | Causa Probable | Acción de Recuperación Inmediata |
 |---|---|---|
 | **Pantalla en blanco o 404 al recargar ruta interna (`/disputes`)** | Falla de redirección SPA en CloudFront | Presionar `Ctrl + F5` en el navegador. La regla SPA de Amplify redirige a `/index.html`. Si persiste, navegar directamente a la raíz `https://main.d24otvpswldjmf.amplifyapp.com/`. |
-| **HTTP 504 (Gateway Timeout) o espera > 25s al analizar** | Cold start extremo de Lambda (2.4-3.2s) sumado a la ejecución | **IMPORTANTE: Un 504 NO significa que el pipeline falló.** La función Lambda continúa su ejecución en segundo plano y persiste el caso en DynamoDB. **NO reintentes de inmediato el comando curl**, ya que crearías casos duplicados o conflictos de idempotencia. En su lugar: recarga el Dashboard en Amplify (`Ctrl + F5` o refresca la pestaña) después de 5-10 segundos para ver la Decision Card ya creada. Si necesitas repetir desde cero, corre el script de reset antes de volver a invocar. |
+| **HTTP 504 (Gateway Timeout) o espera > 25s al analizar** | Cold start extremo de Lambda (2.4-3.2s) sumado al pipeline (22.5s en caliente $\rightarrow$ ~25.5s con cold start) | **IMPORTANTE: Un 504 NO significa que el pipeline falló.** La función Lambda continúa su ejecución en segundo plano y persiste el caso en DynamoDB. En caliente el pipeline toma 22.5s (margen seguro de 7.5s). Si ocurre timeout: **NO reintentes de inmediato el comando curl**, ya que crearías casos duplicados o conflictos de idempotencia. En su lugar: recarga el Dashboard en Amplify (`Ctrl + F5` o refresca la pestaña) después de 5-10 segundos para ver la Decision Card ya creada. Si necesitas repetir desde cero, corre el script de reset antes de volver a invocar. |
 | **Error 500 en `/transactions/webhook` o `/cases`** | Error no controlado en la Lambda | Consultar los logs en tiempo real vía AWS CLI:<br>`aws logs tail /aws/lambda/chargeguard-backend --since 2m --format short`<br>Si persiste más de 30 segundos, pasar de inmediato al **Nivel 2 (Local)**. |
 | **Bedrock `ThrottlingException` o `AccessDeniedException`** | Límite de cuota o problema en credenciales | Cambiar inmediatamente al Nivel 2 en modo mock (`VITE_CHARGEGUARD_DATA_SOURCE=mock`) para mantener la interactividad visual sin dependencia de LLM remoto. |
 
