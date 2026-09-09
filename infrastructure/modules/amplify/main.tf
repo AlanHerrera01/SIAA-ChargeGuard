@@ -24,9 +24,9 @@ resource "aws_amplify_app" "frontend" {
   EOT
 
   environment_variables = {
-    VITE_BACKEND_API_URL         = var.api_gateway_url
-    VITE_MOCK_BANK_API_URL       = "${var.api_gateway_url}/mock/bank"
-    VITE_MOCK_MERCHANT_API_URL   = "${var.api_gateway_url}/mock/merchant"
+    VITE_BACKEND_API_URL         = trimsuffix(var.api_gateway_url, "/")
+    VITE_MOCK_BANK_API_URL       = "${trimsuffix(var.api_gateway_url, "/")}/mock/bank"
+    VITE_MOCK_MERCHANT_API_URL   = "${trimsuffix(var.api_gateway_url, "/")}/mock/merchant"
     VITE_CHARGEGUARD_DATA_SOURCE = "api"
     VITE_DEMO_USER_ID            = "usr_demo"
   }
