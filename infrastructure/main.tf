@@ -19,13 +19,14 @@ module "s3" {
 module "iam" {
   source = "./modules/iam"
 
-  aws_region            = var.aws_region
-  account_id            = data.aws_caller_identity.current.account_id
-  github_repo           = var.github_repo
-  dynamodb_table_arns   = module.dynamodb.table_arns
-  evidence_bucket_arn   = module.s3.bucket_arn
-  bedrock_model_id      = var.bedrock_model_id
-  bedrock_model_id_fast = var.bedrock_model_id_fast
+  aws_region               = var.aws_region
+  account_id               = data.aws_caller_identity.current.account_id
+  github_repo              = var.github_repo
+  github_repo_oidc_subject = var.github_repo_oidc_subject
+  dynamodb_table_arns      = module.dynamodb.table_arns
+  evidence_bucket_arn      = module.s3.bucket_arn
+  bedrock_model_id         = var.bedrock_model_id
+  bedrock_model_id_fast    = var.bedrock_model_id_fast
 }
 
 # 4. Lambda & API Gateway: Backend HTTP API with CORS

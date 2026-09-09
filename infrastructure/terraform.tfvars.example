@@ -2,6 +2,7 @@
 aws_region              = "us-east-1"
 environment             = "dev"
 github_repo             = "AlanHerrera01/SIAA-ChargeGuard"
+github_repo_oidc_subject = "AlanHerrera01@107574787/SIAA-ChargeGuard@1356601608"
 bedrock_model_id        = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 bedrock_model_id_fast   = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 amplify_branch          = "main"

@@ -15,6 +15,11 @@ variable "github_repo" {
   description = "GitHub repository formatted as owner/repo for OIDC trust and Amplify integration (e.g. AlanHerrera01/SIAA-ChargeGuard)"
 }
 
+variable "github_repo_oidc_subject" {
+  type        = string
+  description = "GitHub repository subject with immutable IDs for OIDC token verification (e.g. AlanHerrera01@107574787/SIAA-ChargeGuard@1356601608). Obtain via: gh api repos/<owner>/<repo> --jq '\"\\(.owner.login)@\\(.owner.id)/\\(.name)@\\(.id)\"'"
+}
+
 variable "bedrock_model_id" {
   type        = string
   description = "Bedrock primary inference profile or model ID for autonomous reasoning"

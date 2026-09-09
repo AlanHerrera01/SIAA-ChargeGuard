@@ -14,6 +14,11 @@ variable "github_repo" {
   description = "GitHub repository formatted as owner/repo (e.g. AlanHerrera01/SIAA-ChargeGuard)"
 }
 
+variable "github_repo_oidc_subject" {
+  type        = string
+  description = "GitHub repository subject with immutable IDs for OIDC token verification (e.g. AlanHerrera01@107574787/SIAA-ChargeGuard@1356601608). Obtain via: gh api repos/<owner>/<repo> --jq '\"\\(.owner.login)@\\(.owner.id)/\\(.name)@\\(.id)\"'"
+}
+
 variable "dynamodb_table_arns" {
   type        = list(string)
   description = "List of DynamoDB table ARNs that Lambda and AgentCore need access to"
