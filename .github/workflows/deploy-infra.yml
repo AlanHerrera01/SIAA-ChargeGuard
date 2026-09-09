@@ -60,6 +60,7 @@ jobs:
         run: |
           terraform -chdir=infrastructure plan \
             -var="github_repo=${{ github.repository }}" \
+            -var="github_repo_oidc_subject=${{ vars.AWS_OIDC_SUBJECT || 'AlanHerrera01@107574787/SIAA-ChargeGuard@1356601608' }}" \
             -out=tfplan
 
       - name: Terraform Apply
