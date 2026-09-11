@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from "@/i18n/LanguageContext";
+import { localizeText } from "@/i18n/localizeEvent";
 import type { CaseViewModel } from "@/types/chargeguard";
 
 type DecisionBannerProps = {
@@ -11,7 +12,7 @@ type DecisionBannerProps = {
 };
 
 export function DecisionBanner({ caseView, onReview }: DecisionBannerProps) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const offer = caseView.merchantDispute?.offer;
   if (!offer || caseView.caseData.status !== "awaiting_human") return null;
 
@@ -30,7 +31,7 @@ export function DecisionBanner({ caseView, onReview }: DecisionBannerProps) {
       </CardHeader>
       <CardContent className="pt-5">
         <p className="text-sm font-semibold text-slate-500">{t.dispute.currentOffer}</p>
-        <p className="mt-2 text-xl font-bold text-slate-950">{offer.message}</p>
+        <p className="mt-2 text-xl font-bold text-slate-950">{localizeText(offer.message, language)}</p>
         <p className="mt-2 text-sm leading-6 text-slate-500">
           {t.dispute.offerAgainstClaim} ${offer.amount_usd.toFixed(2)} {t.dispute.againstClaim} ${caseView.caseData.claimed_amount_usd.toFixed(2)}.
         </p>

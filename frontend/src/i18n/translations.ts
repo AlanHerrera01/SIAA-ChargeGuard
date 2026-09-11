@@ -144,6 +144,7 @@ export const translations = {
       rejected: "Oferta rechazada. El agente continuará la disputa.",
       rejectAndContinue: "Rechazar y Continuar ($0)",
       acceptOffer: "Aceptar Oferta ($19.97)",
+      proposedCredit: "Crédito propuesto:",
     },
     simulation: {
       title: "Incremento de precio simulado",
@@ -295,6 +296,7 @@ export const translations = {
       rejected: "Offer rejected. The agent will continue the dispute.",
       rejectAndContinue: "Reject and Continue ($0)",
       acceptOffer: "Accept Offer ($19.97)",
+      proposedCredit: "Proposed credit:",
     },
     simulation: {
       title: "Simulated price increase",

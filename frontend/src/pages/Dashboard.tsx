@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from "@/i18n/LanguageContext";
+import { localizeText } from "@/i18n/localizeEvent";
 import type { ActivityLog, Case, CaseViewModel, Metrics } from "@/types/chargeguard";
 
 type DashboardProps = {
@@ -18,7 +19,7 @@ type DashboardProps = {
 
 export function Dashboard({ metrics, activity, activeCases, caseViewModels }: DashboardProps) {
   const actionableCase = caseViewModels.find((caseView) => caseView.caseData.status === "awaiting_human");
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
 
   return (
     <div>
@@ -64,7 +65,7 @@ export function Dashboard({ metrics, activity, activeCases, caseViewModels }: Da
                   <ShieldCheck className="size-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-950">{item.message}</p>
+                  <p className="text-sm font-semibold text-slate-950">{localizeText(item.message, language)}</p>
                   <p className="mt-1 text-xs font-medium text-slate-500">{item.timestamp}</p>
                 </div>
               </div>
@@ -95,7 +96,9 @@ export function Dashboard({ metrics, activity, activeCases, caseViewModels }: Da
               <p className="text-3xl font-extrabold text-[#10B981]">
                 ${actionableCase.merchantDispute?.offer?.amount_usd.toFixed(2)}
               </p>
-              <p className="mt-2 text-sm leading-6 text-slate-500">{actionableCase.merchantDispute?.offer?.message}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                {localizeText(actionableCase.merchantDispute?.offer?.message, language)}
+              </p>
               <Button asChild className="mt-5 w-full">
                 <Link to={`/disputes/${actionableCase.caseData.case_id}`}>
                   {t.common.openDispute}

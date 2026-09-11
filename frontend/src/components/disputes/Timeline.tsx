@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AlertTriangle, ArrowRight, Clock, FileText, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/i18n/LanguageContext";
+import { localizeText } from "@/i18n/localizeEvent";
 import type { CaseTimelineEvent } from "@/types/chargeguard";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +50,7 @@ export function Timeline({ events, pendingLabel }: TimelineProps) {
           const Icon = iconMap[index % iconMap.length] ?? AlertTriangle;
           const isOpen = openEvent === `${event.event}-${index}`;
           const eventLabel = getEventLabel(event.event, (t.dispute.events ?? {}) as Record<string, string>);
+          const localizedDetail = localizeText(event.detail, language);
 
           return (
             <div
@@ -64,7 +66,7 @@ export function Timeline({ events, pendingLabel }: TimelineProps) {
                     <p className="font-semibold text-slate-950">
                       {index + 1}. {eventLabel}
                     </p>
-                    <p className="mt-1 text-sm leading-6 text-slate-600">{event.detail}</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-600 whitespace-pre-line">{localizedDetail}</p>
                   </div>
                   <span className="text-xs font-semibold text-slate-500">
                     {formatEventTime(event.at, language)}
@@ -82,8 +84,8 @@ export function Timeline({ events, pendingLabel }: TimelineProps) {
                   {isOpen ? (
                     <div className="mt-3 rounded-md border border-slate-800 bg-slate-950 p-4">
                       <p className="text-xs font-semibold uppercase text-slate-400">{t.dispute.trace}</p>
-                      <p className="mt-2 text-sm leading-6 text-emerald-100">
-                        actor={event.actor}; at={event.at}; event={event.event}; detail={event.detail}
+                      <p className="mt-2 text-sm leading-6 text-emerald-100 whitespace-pre-line">
+                        actor={event.actor}; at={event.at}; event={event.event}; detail={localizedDetail}
                       </p>
                     </div>
                   ) : null}
