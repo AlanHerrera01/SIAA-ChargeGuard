@@ -7,7 +7,6 @@ import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { cn } from "@/lib/utils";
 import chargeGuardLogo from "@/076db99a-04d1-4fe0-b3ac-4208548fbfa4.jpeg";
-import type { Metrics } from "@/types/chargeguard";
 
 function StatusBadge() {
   const { t } = useLanguage();
@@ -25,8 +24,6 @@ function StatusBadge() {
 
 type AppLayoutProps = {
   activeCaseId?: string | null;
-  metrics?: Metrics;
-  apiError?: string | null;
 };
 
 function NavTabs({ activeCaseId, onNavigate }: { activeCaseId?: string | null; onNavigate?: () => void }) {
@@ -61,46 +58,9 @@ function NavTabs({ activeCaseId, onNavigate }: { activeCaseId?: string | null; o
   );
 }
 
-export function AppLayout({ activeCaseId, metrics, apiError }: AppLayoutProps = {}) {
+export function AppLayout({ activeCaseId }: AppLayoutProps = {}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { t } = useLanguage();
-
-  const isApiConfigured = env.dataSource === "api";
-  const isApiHealthy = isApiConfigured && !apiError;
-  const isApiFallback = isApiConfigured && Boolean(apiError);
-
-  const badgeText = isApiFallback
-    ? t.app.dataSourceFallback
-    : isApiHealthy
-      ? t.app.dataSourceLive
-      : t.app.dataSourceMock;
-
-  const totalRecoveredFormatted = (metrics?.total_recovered_usd ?? 42.5).toFixed(2);
-
-  const renderSourceBadge = () => (
-    <div
-      className={cn(
-        "flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold uppercase border",
-        isApiFallback
-          ? "border-rose-300 bg-rose-50 text-rose-800"
-          : isApiHealthy
-            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-            : "border-slate-200 bg-slate-50 text-slate-600",
-      )}
-    >
-      <span
-        className={cn(
-          "size-2 rounded-full",
-          isApiFallback
-            ? "bg-rose-500"
-            : isApiHealthy
-              ? "bg-emerald-500 animate-pulse"
-              : "bg-slate-400",
-        )}
-      />
-      {badgeText}
-    </div>
-  );
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -127,10 +87,12 @@ export function AppLayout({ activeCaseId, metrics, apiError }: AppLayoutProps = 
             <NavTabs activeCaseId={activeCaseId} />
             <div className="flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2">
               <CheckCircle2 className="size-4 text-emerald-600" />
-              <span className="text-sm font-semibold text-emerald-700">{t.app.recovered}: ${totalRecoveredFormatted}</span>
+              <span className="text-sm font-semibold text-emerald-700">{t.app.recovered}: $42.50</span>
             </div>
             <LanguageSwitcher />
-            {renderSourceBadge()}
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-500">
+              {t.app.dataSource}: {env.dataSource}
+            </div>
           </div>
 
           <Button aria-label={t.app.toggleNavigation} className="lg:hidden" onClick={() => setMenuOpen((current) => !current)} size="icon" variant="outline">
@@ -148,10 +110,12 @@ export function AppLayout({ activeCaseId, metrics, apiError }: AppLayoutProps = 
               <NavTabs activeCaseId={activeCaseId} onNavigate={() => setMenuOpen(false)} />
               <div className="flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2">
                 <CheckCircle2 className="size-4 text-emerald-600" />
-                <span className="text-sm font-semibold text-emerald-700">{t.app.recovered}: ${totalRecoveredFormatted}</span>
+                <span className="text-sm font-semibold text-emerald-700">{t.app.recovered}: $42.50</span>
               </div>
               <LanguageSwitcher />
-              {renderSourceBadge()}
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-500">
+                {t.app.dataSource}: {env.dataSource}
+              </div>
             </div>
           </div>
         ) : null}

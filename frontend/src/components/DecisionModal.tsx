@@ -75,7 +75,7 @@ export function DecisionModal({
           </Button>
           <Button disabled={isPending || Boolean(decision)} onClick={() => onDecision("accepted")} size="lg">
             {isPending ? <Sparkles className="animate-spin" /> : <ShieldCheck />}
-            {t.decision.acceptOffer} (${offer?.amount_usd.toFixed(2) ?? "0.00"})
+            {t.decision.acceptOffer}
           </Button>
         </div>
       </DialogContent>

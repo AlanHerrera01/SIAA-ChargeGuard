@@ -16,7 +16,6 @@ type AppRoutesProps = {
   activeCases: Case[];
   activity: ActivityLog[];
   isLoadingData: boolean;
-  apiError?: string | null;
   onSimulateIncrease: (id: string) => void | Promise<void>;
   onDecisionResolved: () => void;
 };
@@ -34,13 +33,12 @@ export function AppRoutes({
   activeCases,
   activity,
   isLoadingData,
-  apiError,
   onSimulateIncrease,
   onDecisionResolved,
 }: AppRoutesProps) {
   return (
     <Routes>
-      <Route element={<AppLayout activeCaseId={activeCaseId} apiError={apiError} metrics={metrics} />}>
+      <Route element={<AppLayout activeCaseId={activeCaseId} />}>
         <Route
           index
           element={

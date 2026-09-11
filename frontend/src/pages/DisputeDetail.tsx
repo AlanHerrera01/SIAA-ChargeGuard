@@ -69,21 +69,6 @@ export function DisputeDetail({ caseViewModels, onDecisionResolved }: DisputeDet
   }
 
   const { caseData, merchant, subscription, transaction, decision: pendingDecision } = caseView;
-  const caseTitlePrefix = t.dispute.caseTitles[caseData.anomaly_type] ?? t.dispute.caseTitles.other;
-  const anomalyRowLabel = t.dispute.anomalyRowLabels[caseData.anomaly_type] ?? t.dispute.anomalyRowLabels.other;
-
-  const anomalyRowValue = useMemo(() => {
-    if (caseData.anomaly_type === "duplicate_charge") {
-      return `$${transaction.amount_usd.toFixed(2)} (${subscription.currency === "USD" ? "USD" : subscription.currency} x 2)`;
-    }
-    if (caseData.anomaly_type === "price_hike") {
-      return `$${subscription.base_amount_usd.toFixed(2)} a $${transaction.amount_usd.toFixed(2)}`;
-    }
-    if (caseData.anomaly_type === "charge_after_cancellation") {
-      return `$${transaction.amount_usd.toFixed(2)}`;
-    }
-    return `$${subscription.base_amount_usd.toFixed(2)} a $${transaction.amount_usd.toFixed(2)}`;
-  }, [caseData.anomaly_type, subscription, transaction]);
 
   return (
     <div>
@@ -102,7 +87,7 @@ export function DisputeDetail({ caseViewModels, onDecisionResolved }: DisputeDet
             <CardContent className="space-y-4 text-sm">
               <div className="flex justify-between gap-4">
                 <span className="text-slate-500">{t.common.service}</span>
-                <span className="font-semibold text-slate-950">{merchant.name}</span>
+                <span className="font-semibold text-slate-900">{merchant.name}</span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-slate-500">{t.dispute.disputedAmount}</span>
@@ -111,7 +96,7 @@ export function DisputeDetail({ caseViewModels, onDecisionResolved }: DisputeDet
               <div className="flex justify-between gap-4">
                 <span className="text-slate-500">{t.dispute.detectedChange}</span>
                 <span className="font-semibold text-slate-900">
-                  $ {subscription.base_amount_usd.toFixed(2)} a $ {transaction.amount_usd.toFixed(2)}
+                  ${subscription.base_amount_usd.toFixed(2)} a ${transaction.amount_usd.toFixed(2)}
                 </span>
               </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -130,9 +115,9 @@ export function DisputeDetail({ caseViewModels, onDecisionResolved }: DisputeDet
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <CardTitle>{caseTitlePrefix} {merchant.name}</CardTitle>
+                <CardTitle>{merchant.name} {caseData.anomaly_type} case</CardTitle>
                 <CardDescription>
-                  {t.dispute.claimFor} $ {caseData.claimed_amount_usd.toFixed(2)} {t.dispute.withConfidence} {(caseData.confidence * 100).toFixed(0)} {t.dispute.confidenceSuffix}
+                  {t.dispute.claimFor} ${caseData.claimed_amount_usd.toFixed(2)} {t.dispute.withConfidence} {(caseData.confidence * 100).toFixed(0)}%.
                 </CardDescription>
               </div>
               <StatusBadge status="in_dispute" />
