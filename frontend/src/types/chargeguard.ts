@@ -12,7 +12,15 @@ export type MerchantCategory =
 
 export type SubscriptionContractStatus = "active" | "cancelled";
 export type CaseStatus = "detected" | "investigating" | "dispute_filed" | "awaiting_merchant" | "awaiting_human" | "resolved" | "dismissed";
-export type BackendCaseStatus = "analyzed" | "awaiting_merchant" | "awaiting_human" | "resolved" | "dismissed" | "failed";
+export type BackendCaseStatus = "analyzing" | "analyzed" | "awaiting_merchant" | "awaiting_human" | "resolved" | "dismissed" | "failed";
+export type CaseStepName = "analyze" | "evidence" | "dispute" | "merchant" | "negotiate";
+
+export type CaseAdvanceResponse = {
+  case: BackendCase;
+  done: boolean;
+  retry: boolean;
+  next_step: CaseStepName | null;
+};
 export type BackendAnomalyType = "PRICE_INCREASE" | "DUPLICATE_CHARGE" | "POST_CANCELLATION" | "NONE";
 export type MerchantDisputeStatus =
   | "submitted"

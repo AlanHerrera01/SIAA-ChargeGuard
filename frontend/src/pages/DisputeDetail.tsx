@@ -13,14 +13,16 @@ import { env } from "@/config/env";
 import { useDelayedAction } from "@/hooks/useDelayedAction";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { backendApi } from "@/services/chargeguardApi";
-import type { CaseViewModel } from "@/types/chargeguard";
+import type { BackendCase, CaseStepName, CaseViewModel } from "@/types/chargeguard";
 
 type DisputeDetailProps = {
   caseViewModels: CaseViewModel[];
+  liveCase?: BackendCase | null;
+  liveStep?: CaseStepName | null;
   onDecisionResolved: () => void;
 };
 
-export function DisputeDetail({ caseViewModels, onDecisionResolved }: DisputeDetailProps) {
+export function DisputeDetail({ caseViewModels, liveCase, liveStep, onDecisionResolved }: DisputeDetailProps) {
   const { id } = useParams();
   const [decisionOpen, setDecisionOpen] = useState(false);
   const [decision, setDecision] = useState<"accepted" | "rejected" | null>(null);
@@ -34,6 +36,12 @@ export function DisputeDetail({ caseViewModels, onDecisionResolved }: DisputeDet
     }
     return caseViewModels[0] ?? null;
   }, [caseViewModels, id]);
+
+  // While a case is running, its freshest timeline lives in `liveCase`:
+  // the periodic reload is slower than the step-by-step advances.
+  const isLive = Boolean(liveCase && caseView && liveCase.case_id === caseView.caseData.case_id);
+  const timelineEvents = isLive && liveCase ? liveCase.timeline : caseView?.caseData.timeline ?? [];
+  const pendingLabel = isLive && liveStep ? t.dispute.steps[liveStep] : null;
 
   if (!caseView) {
     return (
@@ -70,6 +78,18 @@ export function DisputeDetail({ caseViewModels, onDecisionResolved }: DisputeDet
 
   const { caseData, merchant, subscription, transaction, decision: pendingDecision } = caseView;
 
+  const caseTitlePrefix =
+    t.dispute.caseTitles[caseData.anomaly_type as keyof typeof t.dispute.caseTitles] ??
+    t.dispute.caseTitles.other;
+  const anomalyLabel =
+    t.dispute.anomalyRowLabels[caseData.anomaly_type as keyof typeof t.dispute.anomalyRowLabels] ??
+    t.dispute.detectedChange;
+
+  const detectedChangeText =
+    caseData.anomaly_type === "duplicate_charge"
+      ? `$${transaction.amount_usd.toFixed(2)} (2x)`
+      : `$${subscription.base_amount_usd.toFixed(2)} → $${transaction.amount_usd.toFixed(2)}`;
+
   return (
     <div>
       <PageHeader
@@ -94,9 +114,9 @@ export function DisputeDetail({ caseViewModels, onDecisionResolved }: DisputeDet
                 <span className="font-semibold text-amber-600">${caseData.claimed_amount_usd.toFixed(2)}</span>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="text-slate-500">{t.dispute.detectedChange}</span>
+                <span className="text-slate-500">{anomalyLabel}</span>
                 <span className="font-semibold text-slate-900">
-                  ${subscription.base_amount_usd.toFixed(2)} a ${transaction.amount_usd.toFixed(2)}
+                  {detectedChangeText}
                 </span>
               </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -115,7 +135,7 @@ export function DisputeDetail({ caseViewModels, onDecisionResolved }: DisputeDet
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <CardTitle>{merchant.name} {caseData.anomaly_type} case</CardTitle>
+                <CardTitle>{caseTitlePrefix} {merchant.name}</CardTitle>
                 <CardDescription>
                   {t.dispute.claimFor} ${caseData.claimed_amount_usd.toFixed(2)} {t.dispute.withConfidence} {(caseData.confidence * 100).toFixed(0)}%.
                 </CardDescription>
@@ -124,7 +144,7 @@ export function DisputeDetail({ caseViewModels, onDecisionResolved }: DisputeDet
             </div>
           </CardHeader>
           <CardContent>
-            <Timeline events={caseData.timeline} />
+            <Timeline events={timelineEvents} pendingLabel={pendingLabel} />
           </CardContent>
         </Card>
 

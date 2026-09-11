@@ -1,6 +1,6 @@
 import { env } from "@/config/env";
 import { createApiClient } from "@/services/apiClient";
-import type { BackendCase, CaseSummary, Merchant, MerchantDispute, Subscription, Transaction } from "@/types/chargeguard";
+import type { BackendCase, CaseAdvanceResponse, CaseSummary, Merchant, MerchantDispute, Subscription, Transaction } from "@/types/chargeguard";
 
 const backendClient = createApiClient(env.backendApiUrl);
 const bankClient = createApiClient(env.mockBankApiUrl);
@@ -52,6 +52,8 @@ export const backendApi = {
   getCases: () => backendClient.get<{ items: CaseSummary[] }>("/cases"),
   getCase: (case_id: string) => backendClient.get<BackendCase>(`/cases/${case_id}`),
   analyzeCase: (transaction_id: string) => backendClient.post<BackendCase>("/cases/analyze", { transaction_id }),
+  startCase: (transaction_id: string) => backendClient.post<BackendCase>("/cases/start", { transaction_id }),
+  advanceCase: (case_id: string) => backendClient.post<CaseAdvanceResponse>(`/cases/${case_id}/advance`),
   resolveDecision: (case_id: string, decision: "accept_offer" | "reject_and_request_full_refund", reason?: string) =>
     backendClient.post<{
       case_id: string;
