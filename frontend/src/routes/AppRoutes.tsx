@@ -6,7 +6,7 @@ import { useRouteLoading } from "@/hooks/useRouteLoading";
 import { Dashboard } from "@/pages/Dashboard";
 import { DisputeDetail } from "@/pages/DisputeDetail";
 import { Subscriptions } from "@/pages/Subscriptions";
-import type { ActivityLog, Case, CaseViewModel, Metrics, SubscriptionViewModel } from "@/types/chargeguard";
+import type { ActivityLog, BackendCase, Case, CaseStepName, CaseViewModel, Metrics, SubscriptionViewModel } from "@/types/chargeguard";
 
 type AppRoutesProps = {
   activeCaseId?: string | null;
@@ -16,6 +16,12 @@ type AppRoutesProps = {
   activeCases: Case[];
   activity: ActivityLog[];
   isLoadingData: boolean;
+<<<<<<< Updated upstream
+=======
+  apiError?: string | null;
+  liveCase?: BackendCase | null;
+  liveStep?: CaseStepName | null;
+>>>>>>> Stashed changes
   onSimulateIncrease: (id: string) => void | Promise<void>;
   onDecisionResolved: () => void;
 };
@@ -33,6 +39,12 @@ export function AppRoutes({
   activeCases,
   activity,
   isLoadingData,
+<<<<<<< Updated upstream
+=======
+  apiError,
+  liveCase,
+  liveStep,
+>>>>>>> Stashed changes
   onSimulateIncrease,
   onDecisionResolved,
 }: AppRoutesProps) {
@@ -59,16 +71,14 @@ export function AppRoutes({
           path="/disputes"
           element={
             <WithRouteLoading>
-              <DisputeDetail caseViewModels={caseViewModels} onDecisionResolved={onDecisionResolved} />
+              <DisputeDetail caseViewModels={caseViewModels} liveCase={liveCase} liveStep={liveStep} onDecisionResolved={onDecisionResolved} />
             </WithRouteLoading>
           }
         />
         <Route
           path="/disputes/:id"
           element={
-            <WithRouteLoading>
-              <DisputeDetail caseViewModels={caseViewModels} onDecisionResolved={onDecisionResolved} />
-            </WithRouteLoading>
+            <DisputeDetail caseViewModels={caseViewModels} liveCase={liveCase} liveStep={liveStep} onDecisionResolved={onDecisionResolved} />
           }
         />
       </Route>

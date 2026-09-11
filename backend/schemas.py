@@ -8,6 +8,7 @@ class Model(BaseModel):
 
 
 CaseStatus = Literal[
+    "analyzing",
     "analyzed",
     "awaiting_merchant",
     "awaiting_human",
@@ -148,6 +149,19 @@ class CaseDetail(Model):
     timeline: list[TimelineEvent]
     created_at: str
     updated_at: str
+
+
+class CaseAdvanceResponse(Model):
+    case: CaseDetail
+    done: bool
+    retry: bool
+    next_step: Literal[
+        "analyze",
+        "evidence",
+        "dispute",
+        "merchant",
+        "negotiate",
+    ] | None
 
 
 class PendingDecision(Model):

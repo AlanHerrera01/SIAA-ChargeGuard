@@ -13,14 +13,16 @@ import { env } from "@/config/env";
 import { useDelayedAction } from "@/hooks/useDelayedAction";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { backendApi } from "@/services/chargeguardApi";
-import type { CaseViewModel } from "@/types/chargeguard";
+import type { BackendCase, CaseStepName, CaseViewModel } from "@/types/chargeguard";
 
 type DisputeDetailProps = {
   caseViewModels: CaseViewModel[];
+  liveCase?: BackendCase | null;
+  liveStep?: CaseStepName | null;
   onDecisionResolved: () => void;
 };
 
-export function DisputeDetail({ caseViewModels, onDecisionResolved }: DisputeDetailProps) {
+export function DisputeDetail({ caseViewModels, liveCase, liveStep, onDecisionResolved }: DisputeDetailProps) {
   const { id } = useParams();
   const [decisionOpen, setDecisionOpen] = useState(false);
   const [decision, setDecision] = useState<"accepted" | "rejected" | null>(null);
@@ -34,6 +36,12 @@ export function DisputeDetail({ caseViewModels, onDecisionResolved }: DisputeDet
     }
     return caseViewModels[0] ?? null;
   }, [caseViewModels, id]);
+
+  // While a case is running, its freshest timeline lives in `liveCase`:
+  // the periodic reload is slower than the step-by-step advances.
+  const isLive = Boolean(liveCase && caseView && liveCase.case_id === caseView.caseData.case_id);
+  const timelineEvents = isLive && liveCase ? liveCase.timeline : caseView?.caseData.timeline ?? [];
+  const pendingLabel = isLive && liveStep ? t.dispute.steps[liveStep] : null;
 
   if (!caseView) {
     return (
@@ -124,7 +132,7 @@ export function DisputeDetail({ caseViewModels, onDecisionResolved }: DisputeDet
             </div>
           </CardHeader>
           <CardContent>
-            <Timeline events={caseData.timeline} />
+            <Timeline events={timelineEvents} pendingLabel={pendingLabel} />
           </CardContent>
         </Card>
 

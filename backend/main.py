@@ -10,7 +10,7 @@ import sys
 import json
 import logging
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
@@ -28,8 +28,14 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 
-from agents.orchestrator import run_chargeguard_case
+from agents.orchestrator import (
+    advance_case_state,
+    case_state_result,
+    create_case_state,
+    run_chargeguard_case,
+)
 from backend.schemas import (
+    CaseAdvanceResponse,
     CaseDetail,
     CaseListResponse,
     CaseSummary,
@@ -381,7 +387,28 @@ def public_timeline(
     return timeline
 
 
-def serialize_case(transaction_id: str, result: dict) -> dict:
+def now_iso() -> str:
+    """Wall-clock UTC timestamp used to stamp timeline events as they happen."""
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def stamp_events(events: list[dict]) -> list[dict]:
+    """Attach the real time of occurrence to freshly emitted agent events."""
+    at = now_iso()
+    return [{"at": at, **event} for event in events]
+
+
+def public_case(case: dict) -> dict:
+    """Hide internal bookkeeping (``_state``) from API consumers."""
+    return {key: value for key, value in case.items() if not key.startswith("_")}
+
+
+def serialize_case(
+    transaction_id: str,
+    result: dict,
+    timeline: list[dict] | None = None,
+    case_id: str | None = None,
+) -> dict:
     """Store the public CaseDetail shape guaranteed for frontend consumers."""
     dispute = to_dict(result.get("dispute")) if result.get("dispute") else None
     merchant_response = to_dict(result.get("merchant_response"))
@@ -397,19 +424,21 @@ def serialize_case(transaction_id: str, result: dict) -> dict:
         merchant.get("name") if merchant else transaction["merchant_id"]
     )
     case_id = (
-        dispute.get("case_id") if dispute else None
-    ) or f"case_{uuid4().hex[:8]}"
+        case_id
+        or (dispute.get("case_id") if dispute else None)
+        or f"case_{uuid4().hex[:8]}"
+    )
     status = public_case_status(analysis, merchant_response)
     created_at = (
         merchant_response.get("created_at")
         if isinstance(merchant_response, dict)
-        else transaction["posted_at"]
-    )
+        else None
+    ) or transaction["posted_at"]
     updated_at = (
         merchant_response.get("updated_at")
         if isinstance(merchant_response, dict)
-        else created_at
-    )
+        else None
+    ) or created_at
     recommendation = negotiation.get("recommendation") if negotiation else None
     if recommendation not in {"accept_offer", "reject_and_request_full_refund"}:
         recommendation = "reject_and_request_full_refund" if status == "awaiting_human" else None
@@ -461,7 +490,9 @@ def serialize_case(transaction_id: str, result: dict) -> dict:
             "reason": reason,
         },
         status=status,
-        timeline=public_timeline(
+        timeline=timeline
+        if timeline is not None
+        else public_timeline(
             transaction,
             analysis,
             dispute,
@@ -492,6 +523,84 @@ def process_transaction(transaction_id: str) -> dict:
     """Run the synchronous agent workflow and persist its API representation."""
     result = run_chargeguard_case(transaction_id)
     return serialize_case(transaction_id, result)
+
+
+def store_stepped_case(
+    case_id: str,
+    state: dict,
+    timeline: list[dict],
+    created_at: str,
+) -> dict:
+    """Persist one snapshot of an in-flight case, keeping its identity stable."""
+    case = serialize_case(
+        state["transaction_id"],
+        case_state_result(state),
+        timeline=timeline,
+        case_id=case_id,
+    )
+    case["created_at"] = created_at
+    case["updated_at"] = now_iso()
+
+    if not state["done"] and case["status"] == "analyzed":
+        case["status"] = "analyzing"
+
+    case["_state"] = state
+    CASES[case_id] = case
+    return case
+
+
+def start_stepped_case(transaction_id: str) -> dict:
+    """Create an empty case up front so the UI has something to show at once."""
+    state = create_case_state(transaction_id)
+    case_id = f"case_{uuid4().hex[:8]}"
+    return store_stepped_case(case_id, state, [], now_iso())
+
+
+def advance_stepped_case(case: dict) -> dict:
+    """Run exactly one agent step and fold its events into the timeline."""
+    state = case.get("_state")
+    if state is None:
+        raise APIError(
+            409,
+            "case_not_steppable",
+            "Case was not created through the stepped workflow",
+        )
+    if state.get("done"):
+        return case
+
+    case_id = case["case_id"]
+    try:
+        state, events = advance_case_state(state)
+    except Exception:
+        logger.exception("Failed to advance case %s", case_id)
+        state["done"] = True
+        state["step"] = None
+        state["retry"] = False
+        failed = store_stepped_case(
+            case_id,
+            state,
+            case["timeline"]
+            + stamp_events(
+                [
+                    {
+                        "actor": "system",
+                        "event": "case_failed",
+                        "detail": "Transaction analysis could not be completed",
+                    }
+                ]
+            ),
+            case["created_at"],
+        )
+        failed["status"] = "failed"
+        CASES[case_id] = failed
+        return failed
+
+    return store_stepped_case(
+        case_id,
+        state,
+        case["timeline"] + stamp_events(events),
+        case["created_at"],
+    )
 
 
 def process_event(event_id: str) -> None:
@@ -652,6 +761,33 @@ async def analyze_case(request: CaseAnalysisRequest):
         raise APIError(500, "case_processing_failed", f"Case analysis failed: {str(e)}")
 
 
+@app.post("/cases/start", response_model=CaseDetail, status_code=201)
+async def start_case(request: CaseAnalysisRequest):
+    """Create a case immediately, before any agent has run.
+
+    The UI navigates to the case right away and then drives it forward with
+    ``POST /cases/{case_id}/advance``, so every step appears as it happens.
+    """
+    if not transaction_exists(request.transaction_id):
+        raise APIError(404, "transaction_not_found", "Transaction not found")
+
+    return public_case(start_stepped_case(request.transaction_id))
+
+
+@app.post("/cases/{case_id}/advance", response_model=CaseAdvanceResponse)
+async def advance_case(case_id: str):
+    """Run the next pending agent step and return the updated case."""
+    case = advance_stepped_case(require_case(case_id))
+    state = case.get("_state") or {}
+
+    return {
+        "case": public_case(case),
+        "done": bool(state.get("done")),
+        "retry": bool(state.get("retry")),
+        "next_step": state.get("step"),
+    }
+
+
 @app.post("/transactions/webhook", status_code=202)
 async def transaction_webhook(
     request: TransactionPostedEvent,
@@ -739,7 +875,7 @@ async def list_cases():
 @app.get("/cases/{case_id}", response_model=CaseDetail)
 async def get_case_status(case_id: str):
     """Get status of an existing case."""
-    return require_case(case_id)
+    return public_case(require_case(case_id))
 
 
 @app.get("/decisions/pending", response_model=PendingDecisionListResponse)
@@ -928,9 +1064,11 @@ async def submit_case_decision(case_id: str, request: CaseDecisionRequest):
     Note: For hackathon MVP, decisions are made during the analyze call.
     Future: support async workflow with separate decision endpoint.
     """
-    return await resolve_merchant_decision(
-        require_case(case_id),
-        DecisionResolutionRequest(decision=request.decision),
+    return public_case(
+        await resolve_merchant_decision(
+            require_case(case_id),
+            DecisionResolutionRequest(decision=request.decision),
+        )
     )
 
 
@@ -977,6 +1115,8 @@ async def root():
         "endpoints": {
             "health": "/health",
             "analyze_case": "POST /cases/analyze",
+            "start_case": "POST /cases/start",
+            "advance_case": "POST /cases/{case_id}/advance",
             "webhook": "POST /transactions/webhook",
             "events": "GET /events",
             "event_status": "GET /events/{event_id}",

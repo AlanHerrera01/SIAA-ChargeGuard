@@ -1,15 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { env } from "@/config/env";
-import { useLanguage } from "@/i18n/LanguageContext";
 import { getActiveCases, getCaseViewModels, getRuntimeMetrics, getSubscriptionViewModels } from "@/lib/chargeguardSelectors";
 import { chargeguardData } from "@/mocks/chargeguardData";
 import { AppRoutes } from "@/routes/AppRoutes";
 import { adaptBackendData } from "@/services/backendDataAdapter";
 import { backendApi } from "@/services/chargeguardApi";
-import type { ChargeGuardData } from "@/types/chargeguard";
+import type { BackendCase, CaseStepName, ChargeGuardData } from "@/types/chargeguard";
+
+/** Safety valve: a case never needs more advances than this to settle. */
+const MAX_ADVANCES = 40;
+/** How long to wait before asking the merchant again while it reviews. */
+const MERCHANT_RETRY_MS = 1000;
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function App() {
   const navigate = useNavigate();
@@ -17,16 +23,15 @@ function App() {
   const [isLoadingData, setIsLoadingData] = useState(env.dataSource === "api");
   const [apiError, setApiError] = useState<string | null>(null);
   const [simulatedAnomalySubscriptionIds, setSimulatedAnomalySubscriptionIds] = useState<string[]>([]);
-  const [simulationDialogOpen, setSimulationDialogOpen] = useState(false);
-  const [simulatedSubscriptionId, setSimulatedSubscriptionId] = useState<string | null>(null);
   const [generatedCaseId, setGeneratedCaseId] = useState<string | null>(null);
-  const { t } = useLanguage();
+  const [liveCase, setLiveCase] = useState<BackendCase | null>(null);
+  const [liveStep, setLiveStep] = useState<CaseStepName | null>(null);
+  const runningCaseId = useRef<string | null>(null);
 
   const loadBackendData = useCallback(async () => {
     if (env.dataSource !== "api") return;
 
     setIsLoadingData(true);
-    setApiError(null);
 
     try {
       const [merchants, subscriptions, transactions, caseList] = await Promise.all([
@@ -38,6 +43,9 @@ function App() {
       const cases = await Promise.all(caseList.items.map((caseSummary) => backendApi.getCase(caseSummary.case_id)));
 
       setData(adaptBackendData({ merchants, subscriptions, transactions, cases }));
+      // Only a successful load clears the banner, so a stale failure never
+      // keeps the header stuck on "Mock (API down)".
+      setApiError(null);
       if (cases.length > 0) {
         setGeneratedCaseId((current) => current ?? cases[0].case_id);
       }
@@ -53,6 +61,42 @@ function App() {
     void loadBackendData();
   }, [loadBackendData]);
 
+  /**
+   * Drive one case forward, one agent step per request.
+   *
+   * This lives in App (not in the dispute page) so the case keeps advancing
+   * no matter which screen the user is on. Each request is short, which is
+   * also what keeps it under the API Gateway timeout.
+   */
+  const runCase = useCallback(
+    async (caseId: string) => {
+      runningCaseId.current = caseId;
+      setLiveStep("analyze");
+
+      try {
+        for (let attempt = 0; attempt < MAX_ADVANCES; attempt += 1) {
+          if (runningCaseId.current !== caseId) return;
+
+          const progress = await backendApi.advanceCase(caseId);
+          setLiveCase(progress.case);
+          setLiveStep(progress.done ? null : progress.next_step);
+
+          if (progress.done) break;
+          if (progress.retry) await wait(MERCHANT_RETRY_MS);
+        }
+      } catch (error) {
+        setApiError(error instanceof Error ? error.message : "Case analysis failed");
+      } finally {
+        if (runningCaseId.current === caseId) {
+          runningCaseId.current = null;
+          setLiveStep(null);
+        }
+        await loadBackendData();
+      }
+    },
+    [loadBackendData],
+  );
+
   const activeCases = useMemo(() => getActiveCases(data.cases), [data.cases]);
   const caseViewModels = useMemo(() => getCaseViewModels(data), [data]);
   const subscriptions = useMemo(
@@ -67,39 +111,33 @@ function App() {
 
   async function handleSimulateIncrease(id: string) {
     setSimulatedAnomalySubscriptionIds((currentIds) => (currentIds.includes(id) ? currentIds : [...currentIds, id]));
-    setSimulatedSubscriptionId(id);
 
-    if (env.dataSource === "api") {
-      const latestTransaction = data.transactions
-        .filter((transaction) => transaction.subscription_id === id)
-        .sort((left, right) => right.posted_at.localeCompare(left.posted_at))[0];
+    if (env.dataSource !== "api") return;
 
-      if (latestTransaction) {
-        try {
-          const backendCase = await backendApi.analyzeCase(latestTransaction.transaction_id);
-          setGeneratedCaseId(backendCase.case_id);
-          await loadBackendData();
-        } catch (error) {
-          setApiError(error instanceof Error ? error.message : "Case analysis failed");
-        }
-      }
-    }
+    const latestTransaction = data.transactions
+      .filter((transaction) => transaction.subscription_id === id)
+      .sort((left, right) => right.posted_at.localeCompare(left.posted_at))[0];
 
-    setSimulationDialogOpen(true);
-  }
+    if (!latestTransaction) return;
 
-  function handleOpenGeneratedCase() {
-    setSimulationDialogOpen(false);
-    if (primaryCaseId) {
-      navigate(`/disputes/${primaryCaseId}`);
-    } else {
-      navigate("/disputes");
+    try {
+      // Creating the case is instant: no agent has run yet. We navigate
+      // straight to it so the user watches the timeline fill up live.
+      const started = await backendApi.startCase(latestTransaction.transaction_id);
+
+      setGeneratedCaseId(started.case_id);
+      setLiveCase(started);
+      await loadBackendData();
+      navigate(`/disputes/${started.case_id}`);
+
+      void runCase(started.case_id);
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "Case analysis failed");
     }
   }
-
-  const simulatedSubscription = subscriptions.find((subscription) => subscription.subscription_id === simulatedSubscriptionId);
 
   return (
+<<<<<<< Updated upstream
     <>
       <AppRoutes
         activeCaseId={primaryCaseId}
@@ -130,6 +168,22 @@ function App() {
         </DialogContent>
       </Dialog>
     </>
+=======
+    <AppRoutes
+      activeCaseId={primaryCaseId}
+      activeCases={activeCases}
+      activity={apiError ? [{ id: "api_error", message: apiError, timestamp: new Date().toISOString() }, ...data.activity] : data.activity}
+      apiError={apiError}
+      caseViewModels={caseViewModels}
+      isLoadingData={isLoadingData}
+      liveCase={liveCase}
+      liveStep={liveStep}
+      metrics={metrics}
+      onDecisionResolved={loadBackendData}
+      onSimulateIncrease={handleSimulateIncrease}
+      subscriptions={subscriptions}
+    />
+>>>>>>> Stashed changes
   );
 }
 

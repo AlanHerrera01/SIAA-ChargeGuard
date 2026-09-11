@@ -27,6 +27,7 @@ const anomalyTypeMap: Record<BackendCase["anomaly"]["type"], Case["anomaly_type"
 };
 
 const statusMap: Record<BackendCase["status"], Case["status"]> = {
+  analyzing: "detected",
   analyzed: "detected",
   awaiting_human: "awaiting_human",
   awaiting_merchant: "awaiting_merchant",

@@ -80,8 +80,43 @@ export const translations = {
       merchantProposal: "envio una propuesta para cerrar el caso.",
       currentOffer: "Oferta actual",
       offerAgainstClaim: "Oferta de",
+<<<<<<< Updated upstream
       againstClaim: "contra reclamo de",
       reviewDecision: "Revisar decision",
+=======
+      againstClaim: "frente a una reclamación de",
+      reviewDecision: "Revisar la decisión",
+      caseTitles: {
+        duplicate_charge: "Caso de duplicación de cargos de",
+        price_hike: "Caso de incremento de precio de",
+        charge_after_cancellation: "Caso de cargo post-cancelación de",
+        other: "Caso de disputa de",
+      },
+      anomalyRowLabels: {
+        price_hike: "Cambio detectado",
+        duplicate_charge: "Cobro duplicado",
+        charge_after_cancellation: "Cobro post-cancelación",
+        other: "Variación detectada",
+      },
+      stepRunning: "El agente está trabajando en este paso…",
+      steps: {
+        analyze: "Analizando la transacción",
+        evidence: "Recopilando evidencia",
+        dispute: "Redactando y enviando la reclamación",
+        merchant: "Esperando respuesta del comerciante",
+        negotiate: "Evaluando la contraoferta",
+      },
+      events: {
+        anomaly_detected: "anomalía_detectada",
+        transaction_analyzed: "transacción_analizada",
+        evidence_gathered: "evidencia_recopilada",
+        dispute_filed: "disputa_presentada",
+        merchant_reviewing: "comerciante_revisando",
+        negotiation_evaluated: "negociación_evaluada",
+        case_failed: "caso_fallido",
+        merchant_response: "Respuesta del comerciante",
+      },
+>>>>>>> Stashed changes
     },
     decision: {
       titleSuffix: "requiere aprobacion",
@@ -185,6 +220,39 @@ export const translations = {
       offerAgainstClaim: "Offer of",
       againstClaim: "against claim of",
       reviewDecision: "Review decision",
+<<<<<<< Updated upstream
+=======
+      caseTitles: {
+        duplicate_charge: "Duplicate charge case for",
+        price_hike: "Price hike case for",
+        charge_after_cancellation: "Post-cancellation charge case for",
+        other: "Dispute case for",
+      },
+      anomalyRowLabels: {
+        price_hike: "Detected change",
+        duplicate_charge: "Duplicate charge",
+        charge_after_cancellation: "Post-cancellation charge",
+        other: "Detected change",
+      },
+      stepRunning: "The agent is working on this step…",
+      steps: {
+        analyze: "Analyzing the transaction",
+        evidence: "Gathering evidence",
+        dispute: "Drafting and filing the claim",
+        merchant: "Waiting for the merchant response",
+        negotiate: "Evaluating the counter-offer",
+      },
+      events: {
+        anomaly_detected: "anomaly_detected",
+        transaction_analyzed: "transaction_analyzed",
+        evidence_gathered: "evidence_gathered",
+        dispute_filed: "dispute_filed",
+        merchant_reviewing: "merchant_reviewing",
+        negotiation_evaluated: "negotiation_evaluated",
+        case_failed: "case_failed",
+        merchant_response: "merchant_response",
+      },
+>>>>>>> Stashed changes
     },
     decision: {
       titleSuffix: "requires approval",

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, ArrowRight, Clock, FileText, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock, FileText, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/i18n/LanguageContext";
 import type { CaseTimelineEvent } from "@/types/chargeguard";
@@ -9,9 +9,31 @@ const iconMap = [AlertTriangle, FileText, ShieldCheck, Clock];
 
 type TimelineProps = {
   events: CaseTimelineEvent[];
+  /** Label of the step running right now; renders a live placeholder row. */
+  pendingLabel?: string | null;
 };
 
+<<<<<<< Updated upstream
 export function Timeline({ events }: TimelineProps) {
+=======
+function formatEventTime(dateStr: string, language: string): string {
+  try {
+    const d = new Date(dateStr);
+    const locale = language === "es" ? "es-CO" : "en-US";
+    return new Intl.DateTimeFormat(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    })
+      .format(d)
+      .toLowerCase();
+  } catch {
+    return dateStr;
+  }
+}
+
+export function Timeline({ events, pendingLabel }: TimelineProps) {
+>>>>>>> Stashed changes
   const [openEvent, setOpenEvent] = useState<string | null>(events[0]?.event ?? null);
   const { t } = useLanguage();
 
@@ -20,13 +42,23 @@ export function Timeline({ events }: TimelineProps) {
       <div className="absolute left-[31px] top-6 h-[calc(100%-48px)] w-px bg-slate-200" />
       <div className="space-y-0">
         {events.map((event, index) => {
-          const Icon = iconMap[index] ?? AlertTriangle;
+          const isLastSettled = index === events.length - 1 && !pendingLabel;
+          const Icon = iconMap[index % iconMap.length] ?? AlertTriangle;
           const isOpen = openEvent === event.event;
 
           return (
+<<<<<<< Updated upstream
             <div className="relative flex gap-4 pb-8 last:pb-0" key={`${event.event}-${event.at}`}>
               <div className="z-10 flex size-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white">
                 <Icon className={index === events.length - 1 ? "size-4 text-amber-600" : "size-4 text-emerald-600"} />
+=======
+            <div
+              className="relative flex animate-in gap-4 pb-8 duration-500 fade-in slide-in-from-bottom-2 last:pb-0"
+              key={`${event.event}-${event.at}-${index}`}
+            >
+              <div className="z-10 flex size-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm">
+                <Icon className={isLastSettled ? "size-4 text-amber-600" : "size-4 text-emerald-600"} />
+>>>>>>> Stashed changes
               </div>
               <div className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -58,6 +90,20 @@ export function Timeline({ events }: TimelineProps) {
             </div>
           );
         })}
+
+        {pendingLabel ? (
+          <div className="relative flex animate-in gap-4 pb-8 duration-500 fade-in last:pb-0">
+            <div className="z-10 flex size-8 shrink-0 items-center justify-center rounded-full border border-amber-300 bg-amber-50">
+              <Loader2 className="size-4 animate-spin text-amber-600" />
+            </div>
+            <div className="min-w-0 flex-1 rounded-lg border border-dashed border-amber-300 bg-amber-50/60 p-4">
+              <p className="font-semibold text-amber-900">
+                {events.length + 1}. {pendingLabel}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-amber-700">{t.dispute.stepRunning}</p>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
