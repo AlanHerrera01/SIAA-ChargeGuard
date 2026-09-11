@@ -201,14 +201,19 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "amplify:GetBranch",
       "amplify:UpdateBranch",
       "amplify:DeleteBranch",
+      "amplify:CreateDeployment",
+      "amplify:StartDeployment",
       "amplify:StartJob",
       "amplify:GetJob",
+      "amplify:ListJobs",
       "amplify:TagResource",
       "amplify:UntagResource",
       "amplify:ListTagsForResource"
     ]
     resources = [
-      "arn:aws:amplify:${var.aws_region}:${var.account_id}:apps/*"
+      "arn:aws:amplify:${var.aws_region}:${var.account_id}:apps/*",
+      "arn:aws:amplify:${var.aws_region}:${var.account_id}:apps/*/branches/*",
+      "arn:aws:amplify:${var.aws_region}:${var.account_id}:apps/*/branches/*/deployments/*"
     ]
   }
 
