@@ -6,7 +6,7 @@ import { chargeguardData } from "@/mocks/chargeguardData";
 import { AppRoutes } from "@/routes/AppRoutes";
 import { adaptBackendData } from "@/services/backendDataAdapter";
 import { backendApi } from "@/services/chargeguardApi";
-import type { BackendCase, CaseStepName, ChargeGuardData } from "@/types/chargeguard";
+import type { BackendCase, CaseStepName, CaseTimelineEvent, ChargeGuardData } from "@/types/chargeguard";
 
 /** Safety valve: a case never needs more advances than this to settle. */
 const MAX_ADVANCES = 40;
@@ -106,35 +106,50 @@ function App() {
       runningCaseId.current = caseId;
       const initialCase: BackendCase = {
         case_id: caseId,
-        user_id: "usr_demo",
-        subscription_id: "sub_003",
-        transaction_id: "txn_0035",
+        transaction: {
+          transaction_id: "txn_0035",
+          subscription_id: "sub_003",
+          merchant_id: "mrc_spotify",
+          merchant_name: "Spotify",
+          amount_usd: 10.99,
+          currency: "USD",
+          posted_at: new Date().toISOString(),
+          description: "SPOTIFY USA DUPLICATE",
+        },
         status: "analyzing",
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
         anomaly: {
           is_anomaly: true,
           type: "DUPLICATE_CHARGE",
           confidence: 0.95,
           reason: "Se detectó un cargo duplicado: La suscripción se cobró dos veces en la misma fecha por el mismo importe ($10.99).",
-          expected_amount: 10.99,
-          actual_amount: 10.99,
-          difference: 10.99,
-        },
-        evidence: {
-          anomaly_type: "DUPLICATE_CHARGE",
-          summary: "Las transacciones txn_0034 y txn_0035 corresponden al mismo servicio Spotify por $10.99 con 8 minutos de diferencia. Contrato S3 verificado.",
-          confidence: 0.95,
-        },
-        dispute: {
-          merchant_id: "mrc_spotify",
+          expected_amount_usd: 10.99,
+          actual_amount_usd: 10.99,
           claimed_amount_usd: 10.99,
+        },
+        evidence: [
+          {
+            type: "subscription_terms",
+            uri: "s3://chargeguard-evidence-demo/terms/sub_003.pdf",
+            description: "Términos del contrato de Spotify y transacciones cruzadas txn_0034 y txn_0035.",
+          },
+        ],
+        dispute: {
+          dispute_id: "dsp_demo_001",
           claim_type: "duplicate_charge",
+          requested_amount_usd: 10.99,
           message: "Disputa formal presentada a Spotify solicitando el reembolso de $10.99 por cargo duplicado con evidencia vinculada.",
         },
-        merchant_dispute: {
-          dispute_id: "dsp_demo_001",
+        merchant: {
           status: "submitted",
           offer: null,
+          resolution: null,
+        },
+        decision: {
+          required: false,
+          recommendation: null,
+          reason: null,
         },
         timeline: [],
       };
@@ -147,7 +162,7 @@ function App() {
       await wait(2500);
       if (runningCaseId.current !== caseId) return;
 
-      const ev1 = {
+      const ev1: CaseTimelineEvent = {
         at: new Date().toISOString(),
         actor: "chargeguard",
         event: "anomalía_detectada",
@@ -160,7 +175,7 @@ function App() {
       await wait(2500);
       if (runningCaseId.current !== caseId) return;
 
-      const ev2 = {
+      const ev2: CaseTimelineEvent = {
         at: new Date().toISOString(),
         actor: "chargeguard",
         event: "evidencia_recopilada",
@@ -173,7 +188,7 @@ function App() {
       await wait(3000);
       if (runningCaseId.current !== caseId) return;
 
-      const ev3 = {
+      const ev3: CaseTimelineEvent = {
         at: new Date().toISOString(),
         actor: "chargeguard",
         event: "disputa_presentada",
@@ -186,7 +201,7 @@ function App() {
       await wait(3500);
       if (runningCaseId.current !== caseId) return;
 
-      const ev4 = {
+      const ev4: CaseTimelineEvent = {
         at: new Date().toISOString(),
         actor: "merchant_api",
         event: "Respuesta del comerciante",
@@ -195,14 +210,20 @@ function App() {
       const updatedCase: BackendCase = {
         ...initialCase,
         status: "awaiting_human",
-        merchant_dispute: {
-          dispute_id: "dsp_demo_001",
+        updated_at: new Date().toISOString(),
+        merchant: {
           status: "counter_offer",
           offer: {
             amount_usd: 6.59,
             message: "Podemos ofrecerle un crédito de cortesía único de 6,59 dólares.",
             expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
           },
+          resolution: null,
+        },
+        decision: {
+          required: true,
+          recommendation: "accept_offer",
+          reason: "El comercio ofrece $6.59 como crédito de cortesía. El agente recomienda aceptar.",
         },
         timeline: [ev1, ev2, ev3, ev4],
       };
