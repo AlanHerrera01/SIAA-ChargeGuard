@@ -29,6 +29,13 @@ function formatEventTime(dateStr: string, language: string): string {
   }
 }
 
+function getEventLabel(eventKey: string, eventMap: Record<string, string>): string {
+  if (eventMap[eventKey]) return eventMap[eventKey];
+  return eventKey
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export function Timeline({ events, pendingLabel }: TimelineProps) {
   const [openEvent, setOpenEvent] = useState<string | null>(events[0]?.event ?? null);
   const { language, t } = useLanguage();
@@ -41,6 +48,7 @@ export function Timeline({ events, pendingLabel }: TimelineProps) {
           const isLastSettled = index === events.length - 1 && !pendingLabel;
           const Icon = iconMap[index % iconMap.length] ?? AlertTriangle;
           const isOpen = openEvent === `${event.event}-${index}`;
+          const eventLabel = getEventLabel(event.event, (t.dispute.events ?? {}) as Record<string, string>);
 
           return (
             <div
@@ -54,7 +62,7 @@ export function Timeline({ events, pendingLabel }: TimelineProps) {
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="font-semibold text-slate-950">
-                      {index + 1}. {event.event}
+                      {index + 1}. {eventLabel}
                     </p>
                     <p className="mt-1 text-sm leading-6 text-slate-600">{event.detail}</p>
                   </div>

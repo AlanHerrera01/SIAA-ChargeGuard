@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { AlertTriangle, Bot, CheckCircle2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { env } from "@/config/env";
 import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { cn } from "@/lib/utils";
-import chargeGuardLogo from "@/076db99a-04d1-4fe0-b3ac-4208548fbfa4.jpeg";
+import chargeGuardLogo from "@/assets/logo.svg";
 import type { Metrics } from "@/types/chargeguard";
 
 function StatusBadge() {
@@ -63,7 +63,14 @@ type AppLayoutProps = {
 
 function NavTabs({ activeCaseId, onNavigate }: { activeCaseId?: string | null; onNavigate?: () => void }) {
   const { t } = useLanguage();
-  const timelineHref = activeCaseId ? `/disputes/${activeCaseId}` : "/disputes";
+  const location = useLocation();
+  const matchDispute = location.pathname.match(/^\/disputes\/([^/]+)/);
+  const currentDisputeId = matchDispute ? matchDispute[1] : null;
+  const timelineHref = currentDisputeId
+    ? `/disputes/${currentDisputeId}`
+    : activeCaseId
+      ? `/disputes/${activeCaseId}`
+      : "/disputes";
   const navItems = [
     { label: t.nav.dashboard, href: "/", icon: Bot },
     { label: t.nav.subscriptions, href: "/subscriptions", icon: ShieldCheck },
