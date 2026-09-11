@@ -105,6 +105,7 @@ function App() {
         activeCaseId={primaryCaseId}
         activeCases={activeCases}
         activity={apiError ? [{ id: "api_error", message: apiError, timestamp: new Date().toISOString() }, ...data.activity] : data.activity}
+        apiError={apiError}
         caseViewModels={caseViewModels}
         isLoadingData={isLoadingData}
         onDecisionResolved={loadBackendData}
