@@ -4,7 +4,7 @@ export const translations = {
   es: {
     app: {
       subtitle: "Your subscription agent",
-      activeAgent: "Agente Activo - Bedrock AgentCore",
+      activeAgent: "Agente Activo — Strands en AWS Lambda",
       recovered: "Total Recuperado",
       dataSource: "data",
       toggleNavigation: "Abrir navegación",
@@ -137,7 +137,7 @@ export const translations = {
   en: {
     app: {
       subtitle: "Your subscription agent",
-      activeAgent: "Agent Active - Bedrock AgentCore",
+      activeAgent: "Active Agent — Strands on AWS Lambda",
       recovered: "Total Recovered",
       dataSource: "data",
       toggleNavigation: "Toggle navigation",
