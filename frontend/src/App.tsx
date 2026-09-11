@@ -97,6 +97,128 @@ function App() {
     [loadBackendData],
   );
 
+  /**
+   * Stepped simulation for mock mode so rehearsals and offline demos
+   * deliver the exact same interactive experience as the live AWS backend.
+   */
+  const runMockCase = useCallback(
+    async (caseId: string) => {
+      runningCaseId.current = caseId;
+      const initialCase: BackendCase = {
+        case_id: caseId,
+        user_id: "usr_demo",
+        subscription_id: "sub_003",
+        transaction_id: "txn_0035",
+        status: "analyzing",
+        created_at: new Date().toISOString(),
+        anomaly: {
+          is_anomaly: true,
+          type: "DUPLICATE_CHARGE",
+          confidence: 0.95,
+          reason: "Se detectó un cargo duplicado: La suscripción se cobró dos veces en la misma fecha por el mismo importe ($10.99).",
+          expected_amount: 10.99,
+          actual_amount: 10.99,
+          difference: 10.99,
+        },
+        evidence: {
+          anomaly_type: "DUPLICATE_CHARGE",
+          summary: "Las transacciones txn_0034 y txn_0035 corresponden al mismo servicio Spotify por $10.99 con 8 minutos de diferencia. Contrato S3 verificado.",
+          confidence: 0.95,
+        },
+        dispute: {
+          merchant_id: "mrc_spotify",
+          claimed_amount_usd: 10.99,
+          claim_type: "duplicate_charge",
+          message: "Disputa formal presentada a Spotify solicitando el reembolso de $10.99 por cargo duplicado con evidencia vinculada.",
+        },
+        merchant_dispute: {
+          dispute_id: "dsp_demo_001",
+          status: "submitted",
+          offer: null,
+        },
+        timeline: [],
+      };
+
+      setLiveCase(initialCase);
+      setLiveStep("analyze");
+      navigate(`/disputes/${caseId}`);
+
+      // Segundo ~2.5: Paso 1 - Anomalía detectada
+      await wait(2500);
+      if (runningCaseId.current !== caseId) return;
+
+      const ev1 = {
+        at: new Date().toISOString(),
+        actor: "chargeguard",
+        event: "anomalía_detectada",
+        detail: "Se detectó un cargo duplicado: La suscripción se cobró dos veces por $10.99 el día de hoy con tan solo 8 minutos de diferencia.",
+      };
+      setLiveCase((prev) => (prev ? { ...prev, timeline: [ev1] } : null));
+      setLiveStep("evidence");
+
+      // Segundo ~5.0: Paso 2 - Evidencia recopilada
+      await wait(2500);
+      if (runningCaseId.current !== caseId) return;
+
+      const ev2 = {
+        at: new Date().toISOString(),
+        actor: "chargeguard",
+        event: "evidencia_recopilada",
+        detail: "Evidencia vinculada desde s3://chargeguard-evidence-demo/terms/sub_003.pdf y transacciones cruzadas txn_0034 y txn_0035.",
+      };
+      setLiveCase((prev) => (prev ? { ...prev, timeline: [...prev.timeline, ev2] } : null));
+      setLiveStep("dispute");
+
+      // Segundo ~8.0: Paso 3 - Disputa presentada
+      await wait(3000);
+      if (runningCaseId.current !== caseId) return;
+
+      const ev3 = {
+        at: new Date().toISOString(),
+        actor: "chargeguard",
+        event: "disputa_presentada",
+        detail: "Carta formal de disputa presentada a Spotify con solicitud de reembolso total por $10.99.",
+      };
+      setLiveCase((prev) => (prev ? { ...prev, timeline: [...prev.timeline, ev3] } : null));
+      setLiveStep("merchant");
+
+      // Segundo ~11.5: Paso 4 - Respuesta del comerciante
+      await wait(3500);
+      if (runningCaseId.current !== caseId) return;
+
+      const ev4 = {
+        at: new Date().toISOString(),
+        actor: "merchant_api",
+        event: "Respuesta del comerciante",
+        detail: "Spotify envió contraoferta: Podemos ofrecerle un crédito de cortesía único de 6,59 dólares.",
+      };
+      const updatedCase: BackendCase = {
+        ...initialCase,
+        status: "awaiting_human",
+        merchant_dispute: {
+          dispute_id: "dsp_demo_001",
+          status: "counter_offer",
+          offer: {
+            amount_usd: 6.59,
+            message: "Podemos ofrecerle un crédito de cortesía único de 6,59 dólares.",
+            expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+          },
+        },
+        timeline: [ev1, ev2, ev3, ev4],
+      };
+      setLiveCase(updatedCase);
+      setLiveStep("negotiate");
+
+      // Segundo ~13.5: Finaliza evaluación y se ilumina el banner ámbar
+      await wait(1800);
+      if (runningCaseId.current !== caseId) return;
+
+      setLiveStep(null);
+      runningCaseId.current = null;
+    },
+    [navigate],
+  );
+
   const activeCases = useMemo(() => getActiveCases(data.cases), [data.cases]);
   const caseViewModels = useMemo(() => getCaseViewModels(data), [data]);
   const subscriptions = useMemo(
@@ -112,7 +234,13 @@ function App() {
   async function handleSimulateIncrease(id: string) {
     setSimulatedAnomalySubscriptionIds((currentIds) => (currentIds.includes(id) ? currentIds : [...currentIds, id]));
 
-    if (env.dataSource !== "api") return;
+    if (env.dataSource !== "api") {
+      const targetCase = caseViewModels.find((cv) => cv.subscription.subscription_id === id) ?? caseViewModels[0];
+      const targetCaseId = targetCase?.caseData.case_id ?? "case_003";
+      setGeneratedCaseId(targetCaseId);
+      void runMockCase(targetCaseId);
+      return;
+    }
 
     const latestTransaction = data.transactions
       .filter((transaction) => transaction.subscription_id === id)
@@ -137,38 +265,6 @@ function App() {
   }
 
   return (
-<<<<<<< Updated upstream
-    <>
-      <AppRoutes
-        activeCaseId={primaryCaseId}
-        activeCases={activeCases}
-        activity={apiError ? [{ id: "api_error", message: apiError, timestamp: new Date().toISOString() }, ...data.activity] : data.activity}
-        caseViewModels={caseViewModels}
-        isLoadingData={isLoadingData}
-        onDecisionResolved={loadBackendData}
-        metrics={metrics}
-        onSimulateIncrease={handleSimulateIncrease}
-        subscriptions={subscriptions}
-      />
-
-      <Dialog open={simulationDialogOpen} onOpenChange={setSimulationDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t.simulation.title}</DialogTitle>
-            <DialogDescription>
-              {simulatedSubscription?.merchant_name ?? t.simulation.fallbackSubscription} {t.simulation.descriptionPrefix}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-            <Button onClick={handleOpenGeneratedCase}>{t.simulation.viewTimeline}</Button>
-            <Button onClick={() => setSimulationDialogOpen(false)} variant="outline">
-              {t.app.close}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
-=======
     <AppRoutes
       activeCaseId={primaryCaseId}
       activeCases={activeCases}
@@ -183,7 +279,6 @@ function App() {
       onSimulateIncrease={handleSimulateIncrease}
       subscriptions={subscriptions}
     />
->>>>>>> Stashed changes
   );
 }
 

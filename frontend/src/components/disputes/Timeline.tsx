@@ -13,9 +13,6 @@ type TimelineProps = {
   pendingLabel?: string | null;
 };
 
-<<<<<<< Updated upstream
-export function Timeline({ events }: TimelineProps) {
-=======
 function formatEventTime(dateStr: string, language: string): string {
   try {
     const d = new Date(dateStr);
@@ -33,9 +30,8 @@ function formatEventTime(dateStr: string, language: string): string {
 }
 
 export function Timeline({ events, pendingLabel }: TimelineProps) {
->>>>>>> Stashed changes
   const [openEvent, setOpenEvent] = useState<string | null>(events[0]?.event ?? null);
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
 
   return (
     <div className="relative pl-4">
@@ -44,21 +40,15 @@ export function Timeline({ events, pendingLabel }: TimelineProps) {
         {events.map((event, index) => {
           const isLastSettled = index === events.length - 1 && !pendingLabel;
           const Icon = iconMap[index % iconMap.length] ?? AlertTriangle;
-          const isOpen = openEvent === event.event;
+          const isOpen = openEvent === `${event.event}-${index}`;
 
           return (
-<<<<<<< Updated upstream
-            <div className="relative flex gap-4 pb-8 last:pb-0" key={`${event.event}-${event.at}`}>
-              <div className="z-10 flex size-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white">
-                <Icon className={index === events.length - 1 ? "size-4 text-amber-600" : "size-4 text-emerald-600"} />
-=======
             <div
               className="relative flex animate-in gap-4 pb-8 duration-500 fade-in slide-in-from-bottom-2 last:pb-0"
               key={`${event.event}-${event.at}-${index}`}
             >
               <div className="z-10 flex size-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm">
                 <Icon className={isLastSettled ? "size-4 text-amber-600" : "size-4 text-emerald-600"} />
->>>>>>> Stashed changes
               </div>
               <div className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -69,11 +59,15 @@ export function Timeline({ events, pendingLabel }: TimelineProps) {
                     <p className="mt-1 text-sm leading-6 text-slate-600">{event.detail}</p>
                   </div>
                   <span className="text-xs font-semibold text-slate-500">
-                    {new Intl.DateTimeFormat("es-CO", { hour: "2-digit", minute: "2-digit" }).format(new Date(event.at))}
+                    {formatEventTime(event.at, language)}
                   </span>
                 </div>
                 <div className="mt-4">
-                  <Button onClick={() => setOpenEvent(isOpen ? null : event.event)} size="sm" variant="ghost">
+                  <Button
+                    onClick={() => setOpenEvent(isOpen ? null : `${event.event}-${index}`)}
+                    size="sm"
+                    variant="ghost"
+                  >
                     <ArrowRight className={cn("transition-transform", isOpen && "rotate-90")} />
                     {t.dispute.agentLogs}
                   </Button>
@@ -93,7 +87,7 @@ export function Timeline({ events, pendingLabel }: TimelineProps) {
 
         {pendingLabel ? (
           <div className="relative flex animate-in gap-4 pb-8 duration-500 fade-in last:pb-0">
-            <div className="z-10 flex size-8 shrink-0 items-center justify-center rounded-full border border-amber-300 bg-amber-50">
+            <div className="z-10 flex size-8 shrink-0 items-center justify-center rounded-full border border-amber-300 bg-amber-50 shadow-sm">
               <Loader2 className="size-4 animate-spin text-amber-600" />
             </div>
             <div className="min-w-0 flex-1 rounded-lg border border-dashed border-amber-300 bg-amber-50/60 p-4">

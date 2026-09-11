@@ -7,6 +7,7 @@ import { LanguageSwitcher } from "@/components/layout/LanguageSwitcher";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { cn } from "@/lib/utils";
 import chargeGuardLogo from "@/076db99a-04d1-4fe0-b3ac-4208548fbfa4.jpeg";
+import type { Metrics } from "@/types/chargeguard";
 
 function StatusBadge() {
   const { t } = useLanguage();
@@ -22,8 +23,42 @@ function StatusBadge() {
   );
 }
 
+function DataSourceBadge({ apiError }: { apiError?: string | null }) {
+  const { language } = useLanguage();
+
+  if (env.dataSource === "mock") {
+    return (
+      <div className="flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+        <span className="size-2 rounded-full bg-slate-400" />
+        <span>{language === "es" ? "Demo Mock" : "Demo Mock"}</span>
+      </div>
+    );
+  }
+
+  if (apiError) {
+    return (
+      <div className="flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+        <span className="size-2 rounded-full bg-red-500" />
+        <span>{language === "es" ? "Mock (API caída)" : "Mock (API down)"}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+      <span className="relative flex size-2">
+        <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+        <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+      </span>
+      <span>{language === "es" ? "API en Vivo (AWS)" : "Live API (AWS)"}</span>
+    </div>
+  );
+}
+
 type AppLayoutProps = {
   activeCaseId?: string | null;
+  metrics?: Metrics;
+  apiError?: string | null;
 };
 
 function NavTabs({ activeCaseId, onNavigate }: { activeCaseId?: string | null; onNavigate?: () => void }) {
@@ -58,9 +93,10 @@ function NavTabs({ activeCaseId, onNavigate }: { activeCaseId?: string | null; o
   );
 }
 
-export function AppLayout({ activeCaseId }: AppLayoutProps = {}) {
+export function AppLayout({ activeCaseId, metrics, apiError }: AppLayoutProps = {}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { t } = useLanguage();
+  const totalRecoveredFormatted = metrics ? `$${metrics.total_recovered_usd.toFixed(2)}` : "$42.50";
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -87,12 +123,10 @@ export function AppLayout({ activeCaseId }: AppLayoutProps = {}) {
             <NavTabs activeCaseId={activeCaseId} />
             <div className="flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2">
               <CheckCircle2 className="size-4 text-emerald-600" />
-              <span className="text-sm font-semibold text-emerald-700">{t.app.recovered}: $42.50</span>
+              <span className="text-sm font-semibold text-emerald-700">{t.app.recovered}: {totalRecoveredFormatted}</span>
             </div>
             <LanguageSwitcher />
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-500">
-              {t.app.dataSource}: {env.dataSource}
-            </div>
+            <DataSourceBadge apiError={apiError} />
           </div>
 
           <Button aria-label={t.app.toggleNavigation} className="lg:hidden" onClick={() => setMenuOpen((current) => !current)} size="icon" variant="outline">
@@ -110,12 +144,10 @@ export function AppLayout({ activeCaseId }: AppLayoutProps = {}) {
               <NavTabs activeCaseId={activeCaseId} onNavigate={() => setMenuOpen(false)} />
               <div className="flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2">
                 <CheckCircle2 className="size-4 text-emerald-600" />
-                <span className="text-sm font-semibold text-emerald-700">{t.app.recovered}: $42.50</span>
+                <span className="text-sm font-semibold text-emerald-700">{t.app.recovered}: {totalRecoveredFormatted}</span>
               </div>
               <LanguageSwitcher />
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-500">
-                {t.app.dataSource}: {env.dataSource}
-              </div>
+              <DataSourceBadge apiError={apiError} />
             </div>
           </div>
         ) : null}

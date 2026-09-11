@@ -78,6 +78,18 @@ export function DisputeDetail({ caseViewModels, liveCase, liveStep, onDecisionRe
 
   const { caseData, merchant, subscription, transaction, decision: pendingDecision } = caseView;
 
+  const caseTitlePrefix =
+    t.dispute.caseTitles[caseData.anomaly_type as keyof typeof t.dispute.caseTitles] ??
+    t.dispute.caseTitles.other;
+  const anomalyLabel =
+    t.dispute.anomalyRowLabels[caseData.anomaly_type as keyof typeof t.dispute.anomalyRowLabels] ??
+    t.dispute.detectedChange;
+
+  const detectedChangeText =
+    caseData.anomaly_type === "duplicate_charge"
+      ? `$${transaction.amount_usd.toFixed(2)} (2x)`
+      : `$${subscription.base_amount_usd.toFixed(2)} → $${transaction.amount_usd.toFixed(2)}`;
+
   return (
     <div>
       <PageHeader
@@ -102,9 +114,9 @@ export function DisputeDetail({ caseViewModels, liveCase, liveStep, onDecisionRe
                 <span className="font-semibold text-amber-600">${caseData.claimed_amount_usd.toFixed(2)}</span>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="text-slate-500">{t.dispute.detectedChange}</span>
+                <span className="text-slate-500">{anomalyLabel}</span>
                 <span className="font-semibold text-slate-900">
-                  ${subscription.base_amount_usd.toFixed(2)} a ${transaction.amount_usd.toFixed(2)}
+                  {detectedChangeText}
                 </span>
               </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -123,7 +135,7 @@ export function DisputeDetail({ caseViewModels, liveCase, liveStep, onDecisionRe
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <CardTitle>{merchant.name} {caseData.anomaly_type} case</CardTitle>
+                <CardTitle>{caseTitlePrefix} {merchant.name}</CardTitle>
                 <CardDescription>
                   {t.dispute.claimFor} ${caseData.claimed_amount_usd.toFixed(2)} {t.dispute.withConfidence} {(caseData.confidence * 100).toFixed(0)}%.
                 </CardDescription>

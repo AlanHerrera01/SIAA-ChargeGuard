@@ -26,6 +26,7 @@ export function DecisionModal({
 }: DecisionModalProps) {
   const offer = caseView.merchantDispute?.offer;
   const { t } = useLanguage();
+  const offerAmount = offer?.amount_usd ? `$${offer.amount_usd.toFixed(2)}` : "$0.00";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -43,7 +44,7 @@ export function DecisionModal({
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
             <p className="text-sm font-semibold text-slate-500">{t.decision.merchantOffer}</p>
             <p className="mt-2 text-xl font-bold text-slate-900">{offer?.message ?? t.decision.noOffer}</p>
-            <p className="mt-3 text-sm font-semibold text-emerald-600">{t.decision.acceptOfferAmount}: ${offer?.amount_usd.toFixed(2) ?? "0.00"}</p>
+            <p className="mt-3 text-sm font-semibold text-emerald-600">{t.decision.acceptOfferAmount}: {offerAmount}</p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-4">
             <p className="text-sm font-semibold text-slate-500">{t.decision.agentRecommendation}</p>
@@ -75,7 +76,7 @@ export function DecisionModal({
           </Button>
           <Button disabled={isPending || Boolean(decision)} onClick={() => onDecision("accepted")} size="lg">
             {isPending ? <Sparkles className="animate-spin" /> : <ShieldCheck />}
-            {t.decision.acceptOffer}
+            {t.decision.acceptOfferAmount} ({offerAmount})
           </Button>
         </div>
       </DialogContent>

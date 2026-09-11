@@ -16,12 +16,9 @@ type AppRoutesProps = {
   activeCases: Case[];
   activity: ActivityLog[];
   isLoadingData: boolean;
-<<<<<<< Updated upstream
-=======
   apiError?: string | null;
   liveCase?: BackendCase | null;
   liveStep?: CaseStepName | null;
->>>>>>> Stashed changes
   onSimulateIncrease: (id: string) => void | Promise<void>;
   onDecisionResolved: () => void;
 };
@@ -39,18 +36,15 @@ export function AppRoutes({
   activeCases,
   activity,
   isLoadingData,
-<<<<<<< Updated upstream
-=======
   apiError,
   liveCase,
   liveStep,
->>>>>>> Stashed changes
   onSimulateIncrease,
   onDecisionResolved,
 }: AppRoutesProps) {
   return (
     <Routes>
-      <Route element={<AppLayout activeCaseId={activeCaseId} />}>
+      <Route element={<AppLayout activeCaseId={activeCaseId} apiError={apiError} metrics={metrics} />}>
         <Route
           index
           element={
