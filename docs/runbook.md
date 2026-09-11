@@ -64,12 +64,35 @@ for path in ['/mock/bank/demo/reset', '/mock/merchant/demo/reset']:
 "
 ```
 
+### Límite Operativo de Concurrencia de Lambda y Gestión de Casos Activos (CRÍTICO)
+
+> [!WARNING]
+> **Requisito Operativo Obligatorio**: Con el límite de concurrencia de AWS Lambda de 10 ejecuciones simultáneas en esta cuenta (cuota default de AWS para cuentas nuevas), **mantener pocos casos en la base no es estética, es un requisito operativo**. Más de ~6 casos y el dashboard empieza a estrangularse.
+
+El Dashboard del frontend solicita el detalle de **cada** caso en paralelo utilizando `Promise.all`. Con más de ~6 casos en `chargeguard-cases`, las peticiones simultáneas (casos + detalles de caso + transacciones + suscripciones) superan los 10 hilos concurrentes, generando `TooManyRequestsException` (throttling), respuestas 5xx y haciendo que el frontend caiga a datos mock.
+
+**Regla obligatoria pre-demo o grabación:**
+1. Mantener siempre **1 solo caso activo** (o máximo 2) en `chargeguard-cases`.
+2. Para limpiar completamente antes de grabar:
+   ```bash
+   python scripts/clean_aws_cases.py
+   # Resetear mocks bancario y comercio
+   curl -X POST https://6zx34nx8v7.execute-api.us-east-1.amazonaws.com/mock/bank/demo/reset
+   curl -X POST https://6zx34nx8v7.execute-api.us-east-1.amazonaws.com/mock/merchant/demo/reset
+   # Calentar backend
+   curl -sI https://6zx34nx8v7.execute-api.us-east-1.amazonaws.com/health
+   curl -sI https://6zx34nx8v7.execute-api.us-east-1.amazonaws.com/health
+   # Generar UN solo caso
+   curl -X POST https://6zx34nx8v7.execute-api.us-east-1.amazonaws.com/cases/analyze -H "Content-Type: application/json" -d '{"transaction_id": "txn_0035"}'
+   ```
+
 ---
 
 ## 3. Matriz de Síntomas y Recuperación Rápida en AWS
 
 | Síntoma Observado | Causa Probable | Acción de Recuperación Inmediata |
 |---|---|---|
+| **Frontend muestra badge "Mock" o 5xx intermitente en dashboard** | Throttling por concurrencia de Lambda: >6 casos en `chargeguard-cases` provocan >10 llamadas simultáneas | Ejecutar limpieza de `chargeguard-cases` y `chargeguard-decisions` para dejar 1 solo caso activo. |
 | **Pantalla en blanco o 404 al recargar ruta interna (`/disputes`)** | Falla de redirección SPA en CloudFront | Presionar `Ctrl + F5` en el navegador. La regla SPA de Amplify redirige a `/index.html`. Si persiste, navegar directamente a la raíz `https://main.d24otvpswldjmf.amplifyapp.com/`. |
 | **HTTP 504 (Gateway Timeout) o espera > 25s al analizar** | Cold start extremo de Lambda (2.4-3.2s) sumado al pipeline (22.5s en caliente $\rightarrow$ ~25.5s con cold start) | **IMPORTANTE: Un 504 NO significa que el pipeline falló.** La función Lambda continúa su ejecución en segundo plano y persiste el caso en DynamoDB. En caliente el pipeline toma 22.5s (margen seguro de 7.5s). Si ocurre timeout: **NO reintentes de inmediato el comando curl**, ya que crearías casos duplicados o conflictos de idempotencia. En su lugar: recarga el Dashboard en Amplify (`Ctrl + F5` o refresca la pestaña) después de 5-10 segundos para ver la Decision Card ya creada. Si necesitas repetir desde cero, corre el script de reset antes de volver a invocar. |
 | **Error 500 en `/transactions/webhook` o `/cases`** | Error no controlado en la Lambda | Consultar los logs en tiempo real vía AWS CLI:<br>`aws logs tail /aws/lambda/chargeguard-backend --since 2m --format short`<br>Si persiste más de 30 segundos, pasar de inmediato al **Nivel 2 (Local)**. |
