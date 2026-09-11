@@ -10,10 +10,10 @@ import type { SubscriptionViewModel } from "@/types/chargeguard";
 
 type SubscriptionsProps = {
   subscriptions: SubscriptionViewModel[];
-  onSimulateIncrease: (id: string) => void | Promise<void>;
+  onAnalyzeCharge: (id: string) => void | Promise<void>;
 };
 
-export function Subscriptions({ subscriptions, onSimulateIncrease }: SubscriptionsProps) {
+export function Subscriptions({ subscriptions, onAnalyzeCharge }: SubscriptionsProps) {
   const [filter, setFilter] = useState<SubscriptionFilter>("all");
   const { t } = useLanguage();
 
@@ -39,7 +39,7 @@ export function Subscriptions({ subscriptions, onSimulateIncrease }: Subscriptio
         </CardHeader>
         <CardContent>
           {filteredSubscriptions.length > 0 ? (
-            <SubscriptionsTable subscriptions={filteredSubscriptions} onSimulateIncrease={onSimulateIncrease} />
+            <SubscriptionsTable subscriptions={filteredSubscriptions} onAnalyzeCharge={onAnalyzeCharge} />
           ) : (
             <EmptyState
               description={t.subscriptions.emptyDescription}

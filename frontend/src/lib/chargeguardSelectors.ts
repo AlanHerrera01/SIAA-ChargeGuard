@@ -34,13 +34,15 @@ export function getCaseViewModels(data: ChargeGuardData): CaseViewModel[] {
   });
 }
 
-export function getSubscriptionViewModels(data: ChargeGuardData, simulatedAnomalySubscriptionIds: string[]): SubscriptionViewModel[] {
+export function getSubscriptionViewModels(data: ChargeGuardData): SubscriptionViewModel[] {
   return data.subscriptions.map((subscription) => {
     const merchant = data.merchants.find((item) => item.merchant_id === subscription.merchant_id);
     const latestTransaction = data.transactions.find((transaction) => transaction.subscription_id === subscription.subscription_id);
-    const relatedCase = data.cases.find((caseData) => caseData.subscription_id === subscription.subscription_id && activeCaseStatuses.has(caseData.status));
-    const hasSimulatedAnomaly = simulatedAnomalySubscriptionIds.includes(subscription.subscription_id);
-    const status = getSubscriptionViewStatus(Boolean(relatedCase), hasSimulatedAnomaly);
+    const casesForSubscription = data.cases.filter((caseData) => caseData.subscription_id === subscription.subscription_id);
+    const activeCase = casesForSubscription.find((caseData) => activeCaseStatuses.has(caseData.status));
+    const latestCase = activeCase ?? (casesForSubscription.length > 0 ? casesForSubscription[casesForSubscription.length - 1] : undefined);
+
+    const status = getSubscriptionViewStatus(Boolean(activeCase));
     const baselineAmount = latestTransaction?.amount_usd ?? subscription.base_amount_usd;
 
     return {
@@ -49,10 +51,10 @@ export function getSubscriptionViewModels(data: ChargeGuardData, simulatedAnomal
       merchant_logo: merchant?.name.slice(0, 1).toUpperCase() ?? "?",
       plan_name: subscription.plan_name,
       billing_cycle: subscription.billing_cycle,
-      current_amount_usd: hasSimulatedAnomaly ? Number((baselineAmount + 5).toFixed(2)) : baselineAmount,
+      current_amount_usd: baselineAmount,
       previous_amount_usd: subscription.base_amount_usd,
       status,
-      case_id: relatedCase?.case_id ?? null,
+      case_id: latestCase?.case_id ?? null,
     };
   });
 }
@@ -69,8 +71,7 @@ export function getRuntimeMetrics(baseMetrics: Metrics, subscriptions: Subscript
   };
 }
 
-function getSubscriptionViewStatus(hasActiveCase: boolean, hasSimulatedAnomaly: boolean): SubscriptionViewStatus {
+function getSubscriptionViewStatus(hasActiveCase: boolean): SubscriptionViewStatus {
   if (hasActiveCase) return "in_dispute";
-  if (hasSimulatedAnomaly) return "anomaly_detected";
   return "healthy";
 }

@@ -19,6 +19,9 @@ Allowed values:
 
 Returns summaries only.
 
+> [!NOTE]
+> **Observación de contrato:** `GET /cases` devuelve resúmenes que no incluyen `subscription_id` en el nivel superior (solo `transaction_id` y `merchant_id`). El frontend resuelve la asociación con la suscripción consultando el detalle completo mediante `GET /cases/{case_id}`, donde `subscription_id` se incluye dentro del objeto `transaction`.
+
 ```json
 {
   "items": [
