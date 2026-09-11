@@ -308,3 +308,10 @@ Two models, both verified by CLI on 2026-09-04. Agents read these from the envir
 | `BEDROCK_MODEL_ID_FAST` | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | High-volume, low-reasoning steps: polling dispute status, extracting fields from an invoice, classifying an email. Optional — if a sub-agent's quality drops, move it to `BEDROCK_MODEL_ID`. |
 
 Claude Sonnet 5 is **not** invocable from the team's accounts (`AccessDeniedException`) and Claude Sonnet 4 is retired as Legacy. Do not switch to either without re-running the `converse` check first. Verified alternates, swappable via the variable alone: `us.anthropic.claude-sonnet-4-6`, `us.anthropic.claude-opus-4-5-20251101-v1:0`.
+
+### 4.5 Observación de contrato en endpoints de casos
+
+- `GET /cases`: Devuelve resúmenes de casos sin `subscription_id` directo en la raíz del item (incluye `case_id`, `transaction_id`, `merchant_id`, `merchant_name`, `anomaly_type`, `claimed_amount_usd`, `currency`, `status`, `created_at`, `updated_at`).
+- `GET /cases/{case_id}`: Devuelve el detalle exhaustivo del caso, conteniendo el objeto `transaction` donde sí viaja `transaction.subscription_id`.
+- El frontend correlaciona cada caso con su respectiva suscripción a través de `GET /cases/{id}` (`transaction.subscription_id`). Contrato congelado para el submit del hackathon; no modificar esquemas existentes.
+

@@ -22,7 +22,6 @@ function App() {
   const [data, setData] = useState<ChargeGuardData>(chargeguardData);
   const [isLoadingData, setIsLoadingData] = useState(env.dataSource === "api");
   const [apiError, setApiError] = useState<string | null>(null);
-  const [simulatedAnomalySubscriptionIds, setSimulatedAnomalySubscriptionIds] = useState<string[]>([]);
   const [generatedCaseId, setGeneratedCaseId] = useState<string | null>(null);
   const [liveCase, setLiveCase] = useState<BackendCase | null>(null);
   const [liveStep, setLiveStep] = useState<CaseStepName | null>(null);
@@ -243,8 +242,8 @@ function App() {
   const activeCases = useMemo(() => getActiveCases(data.cases), [data.cases]);
   const caseViewModels = useMemo(() => getCaseViewModels(data), [data]);
   const subscriptions = useMemo(
-    () => getSubscriptionViewModels(data, simulatedAnomalySubscriptionIds),
-    [data, simulatedAnomalySubscriptionIds],
+    () => getSubscriptionViewModels(data),
+    [data],
   );
   const metrics = useMemo(() => getRuntimeMetrics(data.metrics, subscriptions, activeCases), [activeCases, data.metrics, subscriptions]);
 
@@ -252,9 +251,7 @@ function App() {
     return generatedCaseId ?? caseViewModels[0]?.caseData.case_id ?? data.cases[0]?.case_id ?? null;
   }, [generatedCaseId, caseViewModels, data.cases]);
 
-  async function handleSimulateIncrease(id: string) {
-    setSimulatedAnomalySubscriptionIds((currentIds) => (currentIds.includes(id) ? currentIds : [...currentIds, id]));
-
+  async function handleAnalyzeCharge(id: string) {
     if (env.dataSource !== "api") {
       const targetCase = caseViewModels.find((cv) => cv.subscription.subscription_id === id) ?? caseViewModels[0];
       const targetCaseId = targetCase?.caseData.case_id ?? "case_003";
@@ -297,7 +294,7 @@ function App() {
       liveStep={liveStep}
       metrics={metrics}
       onDecisionResolved={loadBackendData}
-      onSimulateIncrease={handleSimulateIncrease}
+      onAnalyzeCharge={handleAnalyzeCharge}
       subscriptions={subscriptions}
     />
   );

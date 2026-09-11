@@ -8,15 +8,15 @@ import { StatusBadge } from "./StatusBadge";
 
 type SubscriptionsTableProps = {
   subscriptions: SubscriptionViewModel[];
-  onSimulateIncrease: (id: string) => void | Promise<void>;
+  onAnalyzeCharge: (id: string) => void | Promise<void>;
 };
 
 function SubscriptionCard({
   subscription,
-  onSimulateIncrease,
+  onAnalyzeCharge,
 }: {
   subscription: SubscriptionViewModel;
-  onSimulateIncrease: (id: string) => void | Promise<void>;
+  onAnalyzeCharge: (id: string) => void | Promise<void>;
 }) {
   const { t } = useLanguage();
 
@@ -53,30 +53,30 @@ function SubscriptionCard({
       </div>
 
       <div className="flex gap-2 pt-1">
-        {subscription.status === "in_dispute" || subscription.status === "anomaly_detected" ? (
+        {subscription.case_id ? (
           <Button asChild size="sm" variant="ghost" className="flex-1">
-            <Link to={subscription.case_id ? `/disputes/${subscription.case_id}` : "/disputes"}>
+            <Link to={`/disputes/${subscription.case_id}`}>
               <ArrowRight />
-              {t.subscriptions.viewDispute}
+              {subscription.status === "in_dispute" ? t.subscriptions.viewDispute : t.subscriptions.viewAnalysis}
             </Link>
           </Button>
         ) : null}
         <Button
           className="flex-1"
-          disabled={subscription.status !== "healthy"}
-          onClick={() => onSimulateIncrease(subscription.subscription_id)}
+          disabled={subscription.status === "in_dispute"}
+          onClick={() => onAnalyzeCharge(subscription.subscription_id)}
           size="sm"
           variant="outline"
         >
           <Sparkles />
-          {t.subscriptions.simulateIncrease}
+          {t.subscriptions.analyzeCharge}
         </Button>
       </div>
     </div>
   );
 }
 
-export function SubscriptionsTable({ subscriptions, onSimulateIncrease }: SubscriptionsTableProps) {
+export function SubscriptionsTable({ subscriptions, onAnalyzeCharge }: SubscriptionsTableProps) {
   const { t } = useLanguage();
 
   return (
@@ -120,22 +120,22 @@ export function SubscriptionsTable({ subscriptions, onSimulateIncrease }: Subscr
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    {subscription.status === "in_dispute" || subscription.status === "anomaly_detected" ? (
+                    {subscription.case_id ? (
                       <Button asChild size="sm" variant="ghost">
-                        <Link to={subscription.case_id ? `/disputes/${subscription.case_id}` : "/disputes"}>
+                        <Link to={`/disputes/${subscription.case_id}`}>
                           <ArrowRight />
-                          {t.subscriptions.viewDispute}
+                          {subscription.status === "in_dispute" ? t.subscriptions.viewDispute : t.subscriptions.viewAnalysis}
                         </Link>
                       </Button>
                     ) : null}
                     <Button
-                      disabled={subscription.status !== "healthy"}
-                      onClick={() => onSimulateIncrease(subscription.subscription_id)}
+                      disabled={subscription.status === "in_dispute"}
+                      onClick={() => onAnalyzeCharge(subscription.subscription_id)}
                       size="sm"
                       variant="outline"
                     >
                       <Sparkles />
-                      {t.subscriptions.simulateIncrease}
+                      {t.subscriptions.analyzeCharge}
                     </Button>
                   </div>
                 </TableCell>
@@ -150,7 +150,7 @@ export function SubscriptionsTable({ subscriptions, onSimulateIncrease }: Subscr
         {subscriptions.map((subscription) => (
           <SubscriptionCard
             key={subscription.subscription_id}
-            onSimulateIncrease={onSimulateIncrease}
+            onAnalyzeCharge={onAnalyzeCharge}
             subscription={subscription}
           />
         ))}

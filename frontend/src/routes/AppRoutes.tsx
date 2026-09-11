@@ -19,7 +19,7 @@ type AppRoutesProps = {
   apiError?: string | null;
   liveCase?: BackendCase | null;
   liveStep?: CaseStepName | null;
-  onSimulateIncrease: (id: string) => void | Promise<void>;
+  onAnalyzeCharge: (id: string) => void | Promise<void>;
   onDecisionResolved: () => void;
 };
 
@@ -39,7 +39,7 @@ export function AppRoutes({
   apiError,
   liveCase,
   liveStep,
-  onSimulateIncrease,
+  onAnalyzeCharge,
   onDecisionResolved,
 }: AppRoutesProps) {
   return (
@@ -57,7 +57,7 @@ export function AppRoutes({
           path="/subscriptions"
           element={
             <WithRouteLoading>
-              {isLoadingData ? <LoadingView /> : <Subscriptions onSimulateIncrease={onSimulateIncrease} subscriptions={subscriptions} />}
+              {isLoadingData ? <LoadingView /> : <Subscriptions onAnalyzeCharge={onAnalyzeCharge} subscriptions={subscriptions} />}
             </WithRouteLoading>
           }
         />
