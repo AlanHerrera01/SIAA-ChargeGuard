@@ -67,7 +67,7 @@ export function AppLayout({ activeCaseId }: AppLayoutProps = {}) {
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-12 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white p-1 shadow-sm">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white p-1 shadow-sm sm:size-12">
               <img
                 alt="ChargeGuard shield logo"
                 className="max-h-full max-w-full object-contain"

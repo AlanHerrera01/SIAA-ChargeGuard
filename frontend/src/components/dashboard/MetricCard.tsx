@@ -20,14 +20,14 @@ export function MetricCard({ title, value, detail, icon: Icon, tone = "slate" }:
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
-        <CardTitle className="text-sm text-slate-500">{title}</CardTitle>
-        <div className={`flex size-9 items-center justify-center rounded-md ${toneMap[tone]}`}>
+        <CardTitle className="text-xs text-slate-500 sm:text-sm">{title}</CardTitle>
+        <div className={`flex size-8 shrink-0 items-center justify-center rounded-md sm:size-9 ${toneMap[tone]}`}>
           <Icon className="size-4" />
         </div>
       </CardHeader>
       <CardContent>
-        <div className="text-3xl font-extrabold tracking-normal text-slate-950">{value}</div>
-        <p className="mt-2 text-sm text-slate-500">{detail}</p>
+        <div className="text-2xl font-extrabold tracking-normal text-slate-950 sm:text-3xl">{value}</div>
+        <p className="mt-2 text-xs text-slate-500 sm:text-sm">{detail}</p>
       </CardContent>
     </Card>
   );
