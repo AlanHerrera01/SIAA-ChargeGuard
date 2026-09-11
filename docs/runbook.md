@@ -71,20 +71,29 @@ for path in ['/mock/bank/demo/reset', '/mock/merchant/demo/reset']:
 
 El Dashboard del frontend solicita el detalle de **cada** caso en paralelo utilizando `Promise.all`. Con más de ~6 casos en `chargeguard-cases`, las peticiones simultáneas (casos + detalles de caso + transacciones + suscripciones) superan los 10 hilos concurrentes, generando `TooManyRequestsException` (throttling), respuestas 5xx y haciendo que el frontend caiga a datos mock.
 
-**Regla obligatoria pre-demo o grabación:**
-1. Mantener siempre **1 solo caso activo** (o máximo 2) en `chargeguard-cases`.
-2. Para limpiar completamente antes de grabar:
+### Directrices para Grabación de Video y Mitigación de Timeouts
+
+> [!CAUTION]
+> **NUNCA usar `POST /cases/analyze` en cámara durante la grabación**:
+> Este endpoint monolítico tarda entre 22s y 28.9s (medido 28.9s) contra el límite duro de 29-30s de Amazon API Gateway. Es el endpoint más riesgoso y el que causa respuestas 5xx / 504 y caídas al badge "Mock (API caída)".
+
+**Protocolo para la Grabación:**
+1. **Para grabar el video (Recomendado / Riesgo Cero)**: Generar el caso **ANTES, fuera de cámara**, y filmar solo el resultado en el Dashboard y la interacción con la Decision Card:
    ```bash
+   # Preparación previa fuera de cámara:
    python scripts/clean_aws_cases.py
-   # Resetear mocks bancario y comercio
    curl -X POST https://6zx34nx8v7.execute-api.us-east-1.amazonaws.com/mock/bank/demo/reset
    curl -X POST https://6zx34nx8v7.execute-api.us-east-1.amazonaws.com/mock/merchant/demo/reset
-   # Calentar backend
    curl -sI https://6zx34nx8v7.execute-api.us-east-1.amazonaws.com/health
    curl -sI https://6zx34nx8v7.execute-api.us-east-1.amazonaws.com/health
-   # Generar UN solo caso
    curl -X POST https://6zx34nx8v7.execute-api.us-east-1.amazonaws.com/cases/analyze -H "Content-Type: application/json" -d '{"transaction_id": "txn_0035"}'
    ```
+2. **Si se quiere mostrar el agente trabajando en vivo**: Usar el botón de la UI (flujo por pasos `/cases/start` + `/advance`). Tiene un máximo de **9.6s** por petición (3x más margen seguro de timeout). **NO navegar entre pestañas ni recargar mientras el caso avanza**.
+3. **Recuperación si un caso queda en estado intermedio**: Si el bucle se detiene por navegación o desconexión quedando en `analyzing` o `awaiting_merchant`, se retoma ejecutando manualmente:
+   ```bash
+   curl -X POST https://6zx34nx8v7.execute-api.us-east-1.amazonaws.com/cases/<CASE_ID>/advance
+   ```
+   hasta que alcance el estado `awaiting_human`.
 
 ---
 
