@@ -129,6 +129,7 @@ export const translations = {
         evidencia_recopilada: "Evidencia Recopilada",
         disputa_presentada: "Disputa Presentada",
         "Respuesta del comerciante": "Respuesta del Comerciante",
+        decision_resolved: "Decisión Resuelta",
       },
     },
     decision: {
@@ -281,6 +282,7 @@ export const translations = {
         evidencia_recopilada: "Evidence Gathered",
         disputa_presentada: "Dispute Filed",
         "Respuesta del comerciante": "Merchant Response",
+        decision_resolved: "Decision Resolved",
       },
     },
     decision: {

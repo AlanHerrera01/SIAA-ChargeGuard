@@ -2,8 +2,8 @@ import type { Language } from "./translations";
 
 /**
  * Translates agent-generated English texts (anomaly analyses, evidence summaries,
- * dispute letters, merchant offers, dates, and negotiation recommendations) into natural Spanish
- * when language === "es", while keeping dynamic values (amounts, dates, IDs, merchant names) intact.
+ * dispute letters, merchant offers, dates, decision actions, and negotiation recommendations)
+ * into natural Spanish when language === "es", while keeping dynamic values intact.
  */
 export function localizeText(text: string | null | undefined, language: Language): string {
   if (!text) return "";
@@ -11,29 +11,85 @@ export function localizeText(text: string | null | undefined, language: Language
 
   let translated = text;
 
-  // 0. English Month and Date Localization
-  translated = translated.replace(/\bJanuary (\d{1,2}), (\d{4})\b/g, "$1 de enero de $2");
-  translated = translated.replace(/\bFebruary (\d{1,2}), (\d{4})\b/g, "$1 de febrero de $2");
-  translated = translated.replace(/\bMarch (\d{1,2}), (\d{4})\b/g, "$1 de marzo de $2");
-  translated = translated.replace(/\bApril (\d{1,2}), (\d{4})\b/g, "$1 de abril de $2");
-  translated = translated.replace(/\bMay (\d{1,2}), (\d{4})\b/g, "$1 de mayo de $2");
-  translated = translated.replace(/\bJune (\d{1,2}), (\d{4})\b/g, "$1 de junio de $2");
-  translated = translated.replace(/\bJuly (\d{1,2}), (\d{4})\b/g, "$1 de julio de $2");
-  translated = translated.replace(/\bAugust (\d{1,2}), (\d{4})\b/g, "$1 de agosto de $2");
-  translated = translated.replace(/\bSeptember (\d{1,2}), (\d{4})\b/g, "$1 de septiembre de $2");
-  translated = translated.replace(/\bOctober (\d{1,2}), (\d{4})\b/g, "$1 de octubre de $2");
-  translated = translated.replace(/\bNovember (\d{1,2}), (\d{4})\b/g, "$1 de noviembre de $2");
-  translated = translated.replace(/\bDecember (\d{1,2}), (\d{4})\b/g, "$1 de diciembre de $2");
+  // 1. Decision actions (e.g. in step 6)
+  translated = translated.replace(/\breject_and_request_full_refund\b/gi, "Rechazar contraoferta y solicitar reembolso total");
+  translated = translated.replace(/\baccept_offer\b/gi, "Aceptar contraoferta");
+  translated = translated.replace(/User requested a full refund/gi, "El usuario solicitó un reembolso total");
 
-  // 1. Salutations and Dispute Letter Opening
+  // 2. Dispute Letter Sentences & Paragraphs
   translated = translated.replace(
     /Dear ([^,:\n]+)[,:]/gi,
     "Estimado equipo de $1:"
   );
 
   translated = translated.replace(
+    /I am writing to dispute a duplicate charge on my account\.?/gi,
+    "Escribo para disputar un cobro duplicado en mi cuenta."
+  );
+
+  translated = translated.replace(
+    /(?:On|on) ([^,]+),\s*my ([A-Za-z0-9\s]+) subscription was charged twice for the same service on the same day:?/gi,
+    "El $1, mi suscripción a $2 fue cobrada dos veces por el mismo servicio en el mismo día:"
+  );
+
+  translated = translated.replace(
+    /- Transaction ([a-z0-9_]+):\s*\$([\d,.]+) USD charged at ([0-9:]+) UTC\s*\(([^)]+)\)/gi,
+    "- Transacción $1: $$$2 USD cobrados a las $3 UTC ($4)"
+  );
+
+  translated = translated.replace(
+    /- Transaction ([a-z0-9_]+):\s*\$([\d,.]+) USD charged at ([0-9:]+) UTC/gi,
+    "- Transacción $1: $$$2 USD cobrados a las $3 UTC"
+  );
+
+  translated = translated.replace(
+    /Both charges are identical in amount and occurred within an unusually short timeframe of only (\d+) seconds,\s*indicating that the second charge \(([^)]+)\) is a duplicate of the first legitimate subscription charge\.?/gi,
+    "Ambos cobros son idénticos en monto y ocurrieron en un lapso inusualmente corto de solo $1 segundos, lo que indica que el segundo cobro ($2) es un duplicado del primer cobro legítimo de la suscripción."
+  );
+
+  translated = translated.replace(
+    /Both charges are identical in amount and occurred within an unusually short timeframe of only (\d+) seconds[^.]*\.?/gi,
+    "Ambos cobros son idénticos en monto y ocurrieron en un lapso inusualmente corto de solo $1 segundos."
+  );
+
+  translated = translated.replace(
+    /I have only one active ([A-Za-z0-9\s]+) subscription and should have been charged only once for this billing cycle\.?/gi,
+    "Tengo una sola suscripción activa a $1 y debí haber sido cobrado una sola vez para este ciclo de facturación."
+  );
+
+  translated = translated.replace(
+    /I request a refund of the full duplicated charge amount of \$([\d,.]+) USD for transaction ([a-z0-9_]+)\.?/gi,
+    "Solicito el reembolso del monto total del cobro duplicado de $$$1 USD correspondiente a la transacción $2."
+  );
+
+  translated = translated.replace(
+    /I request a refund of the full duplicated charge amount of \$([\d,.]+) USD\.?/gi,
+    "Solicito el reembolso del monto total del cobro duplicado de $$$1 USD."
+  );
+
+  translated = translated.replace(
+    /(\d+) minutes later/gi,
+    "$1 minutos después"
+  );
+
+  translated = translated.replace(
+    /I am writing to dispute a charge on my account regarding transaction ([a-z0-9_]+) for \$([\d,.]+) USD\.?/gi,
+    "Escribo para disputar un cargo en mi cuenta correspondiente a la transacción $1 por $$$2 USD."
+  );
+
+  translated = translated.replace(
     /I am writing to dispute a charge that was posted to my account after my subscription cancellation\.?/gi,
     "Escribo para disputar un cargo registrado en mi cuenta con posterioridad a la cancelación de mi suscripción."
+  );
+
+  translated = translated.replace(
+    /I am writing to dispute transaction ([a-z0-9_]+) for \$([\d,.]+) USD due to an unjustified price increase on my subscription\.?/gi,
+    "Escribo para disputar la transacción $1 por $$$2 USD debido a un incremento de precio no justificado en mi suscripción."
+  );
+
+  translated = translated.replace(
+    /I am writing to dispute transaction ([a-z0-9_]+) for \$([\d,.]+) USD because it appears to be a duplicate charge\.?/gi,
+    "Escribo para disputar la transacción $1 por $$$2 USD debido a que corresponde a un cobro duplicado."
   );
 
   translated = translated.replace(
@@ -56,10 +112,9 @@ export function localizeText(text: string | null | undefined, language: Language
     "Ningún cobro debió ocurrir tras la cancelación."
   );
 
-  // 2. Price Hike Dispute Letter Sentences
   translated = translated.replace(
-    /I am writing to dispute transaction ([a-z0-9_]+) for \$([\d,.]+) USD due to an unjustified price increase on my subscription\.?/gi,
-    "Escribo para disputar la transacción $1 por $$$2 USD debido a un incremento de precio no justificado en mi suscripción."
+    /my ([A-Za-z0-9\s]+) subscription was consistently charged at \$([\d,.]+) USD per billing cycle\.?/gi,
+    "mi suscripción a $1 se cobró consistentemente a $$$2 USD por ciclo de facturación."
   );
 
   translated = translated.replace(
@@ -68,8 +123,18 @@ export function localizeText(text: string | null | undefined, language: Language
   );
 
   translated = translated.replace(
+    /The current charge of \$([\d,.]+) USD represents an unexpected increase of \$([\d,.]+) USD \((?:approximately )?(\d+)%\) from the established rate\.?/gi,
+    "El cobro actual de $$$1 USD representa un incremento inesperado de $$$2 USD (aproximadamente el $3%) respecto a la tarifa acordada."
+  );
+
+  translated = translated.replace(
     /However, the current charge has increased to \$([\d,.]+) USD,\s*representing a \$([\d,.]+) increase or (\d+)% above my established billing history\.?/gi,
     "Sin embargo, el cobro actual aumentó a $$$1 USD, lo que representa un incremento de $$$2 USD ($3% por encima de mi historial de facturación)."
+  );
+
+  translated = translated.replace(
+    /I have not authorized this price increase and do not recall receiving notice of a change to my subscription terms\.?/gi,
+    "No he autorizado este incremento de precio ni he recibido notificación de un cambio en los términos de mi suscripción."
   );
 
   translated = translated.replace(
@@ -78,14 +143,23 @@ export function localizeText(text: string | null | undefined, language: Language
   );
 
   translated = translated.replace(
+    /I request a refund of the \$([\d,.]+) USD difference to restore the charge to the historical subscription amount of \$([\d,.]+) USD\.?/gi,
+    "Solicito el reembolso de la diferencia de $$$1 USD para restablecer el cobro al monto histórico de la suscripción de $$$2 USD."
+  );
+
+  translated = translated.replace(
     /My subscription terms and previous invoices confirm that the historical amount of \$([\d,.]+) USD was the agreed-upon monthly charge\.?/gi,
     "Los términos de la suscripción y facturas previas confirman que el monto histórico de $$$1 USD era el cargo mensual acordado."
   );
 
-  // 3. Duplicate Charge Dispute Letter Sentences
   translated = translated.replace(
-    /I am writing to dispute transaction ([a-z0-9_]+) for \$([\d,.]+) USD because it appears to be a duplicate charge\.?/gi,
-    "Escribo para disputar la transacción $1 por $$$2 USD debido a que corresponde a un cobro duplicado."
+    /Please review this matter and advise on the reason for this increase\.?/gi,
+    "Por favor revisen este asunto e infórmenme sobre el motivo de este incremento."
+  );
+
+  translated = translated.replace(
+    /I have retained copies of my invoices and transaction history to support this dispute\.?/gi,
+    "He conservado copias de mis facturas e historial de transacciones como respaldo de esta disputa."
   );
 
   translated = translated.replace(
@@ -98,64 +172,75 @@ export function localizeText(text: string | null | undefined, language: Language
     "El cobro inicial se procesó en la transacción $1 a las $2, y un cobro duplicado de $$$3 USD se registró en la transacción $4 tan solo $5 minutos después ($6)."
   );
 
-  // 4. Transaction details table & closings
-  translated = translated.replace(/Transaction details:/gi, "Detalles de la transacción:");
-  translated = translated.replace(/- Transaction ID:/gi, "- ID de Transacción:");
-  translated = translated.replace(/- Amount charged:/gi, "- Monto cobrado:");
-  translated = translated.replace(/- Date posted:/gi, "- Fecha registrada:");
-  translated = translated.replace(/- Subscription status at time of charge:/gi, "- Estado de suscripción al momento del cobro:");
-  translated = translated.replace(/Cancelled \(as of ([^)]+)\)/gi, "Cancelada (al $1)");
-  translated = translated.replace(/Active/gi, "Activa");
-
+  // 3. Granular Anomaly Reasons & Dashboard clauses (Price increase / Legitimate / Duplicate / Post cancellation)
   translated = translated.replace(
-    /I respectfully request a full refund of \$([\d,.]+) USD for this post-cancellation charge\.?/gi,
-    "Solicito respetuosamente el reembolso total de $$$1 USD correspondiente a este cobro post-cancelación."
+    /The current ([A-Za-z0-9\s]+) charge of \$([\d,.]+) is \$([\d,.]+) higher than the established historical amount of \$([\d,.]+)/gi,
+    "El cobro actual de $1 de $$$2 es $$$3 superior al monto histórico establecido de $$$4"
   );
 
   translated = translated.replace(
-    /I respectfully request a refund of \$([\d,.]+) USD to adjust this transaction to the historical and expected amount\.?/gi,
-    "Solicito respetuosamente un reembolso de $$$1 USD para ajustar esta transacción al monto histórico esperado."
+    /The current charge of \$([\d,.]+) is \$([\d,.]+) higher than the established historical amount of \$([\d,.]+)/gi,
+    "El cobro actual de $$$1 es $$$2 superior al monto histórico establecido de $$$3"
   );
 
   translated = translated.replace(
-    /I respectfully request a full refund of \$([\d,.]+) USD for the duplicate charge\.?/gi,
-    "Solicito respetuosamente el reembolso total de $$$1 USD correspondiente al cobro duplicado."
+    /that was consistently charged (?:from|de) ([^.]+)/gi,
+    "(cobrado consistentemente de $1)"
   );
 
   translated = translated.replace(
-    /Thank you for your prompt attention to this matter\.?/gi,
-    "Agradezco de antemano su pronta atención a este caso."
+    /that was consistently charged ([^.]+)/gi,
+    "(cobrado consistentemente $1)"
   );
 
   translated = translated.replace(
-    /Best regards,?/gi,
-    "Atentamente,"
+    /This represents a (\d+)% price increase\.?(?:\s*from the base subscription amount\.?)?/gi,
+    "Esto representa un incremento de precio del $1% respecto a la suscripción base."
   );
 
   translated = translated.replace(
-    /Sincerely,?/gi,
-    "Atentamente,"
+    /The current charge of \$([\d,.]+) matches the established historical pattern of monthly charges/gi,
+    "El cobro actual de $$$1 coincide con el patrón histórico mensual de cobros"
   );
 
-  // 5. Anomaly analysis reasons (ChargeAnalysisAgent)
+  translated = translated.replace(
+    /The current ([A-Za-z0-9\s]+) charge of \$([\d,.]+) matches the established historical pattern/gi,
+    "El cobro actual de $1 de $$$2 coincide con el patrón histórico establecido"
+  );
+
+  translated = translated.replace(
+    /The current charge of \$([\d,.]+) matches the established historical pattern/gi,
+    "El cobro actual de $$$1 coincide con el patrón histórico establecido"
+  );
+
+  translated = translated.replace(
+    /All previous transactions (?:from|de) ([^ ]+) (?:to|through|a) ([^ ]+ \d{4}) were consistently \$([\d,.]+)/gi,
+    "Todas las transacciones previas de $1 a $2 fueron consistentemente de $$$3"
+  );
+
+  translated = translated.replace(
+    /All previous transactions ([^.]+?) were consistently \$([\d,.]+)/gi,
+    "Todas las transacciones previas $1 fueron consistentemente de $$$2"
+  );
+
+  translated = translated.replace(
+    /The subscription is (?:active|Active|Activa), not cancelled,\s*and this charge follows the expected monthly billing cycle with no price change or duplication\.?/gi,
+    "La suscripción está activa (no cancelada) y este cobro sigue el ciclo de facturación mensual esperado sin cambios de precio ni duplicidad."
+  );
+
+  translated = translated.replace(
+    /The subscription is (?:Active|Activa) with no cancellation date,\s*and the amount is consistent with the base subscription price and all previous transactions\.?/gi,
+    "La suscripción está activa sin fecha de cancelación, y el monto es consistente con el precio base y todas las transacciones previas."
+  );
+
   translated = translated.replace(
     /The subscription was cancelled on ([^,]+),\s*but this charge was posted on ([^,]+),\s*which is (\d+) days after the cancellation date\.?/gi,
     "La suscripción fue cancelada el $1, pero este cobro fue registrado el $2 ($3 días después de la fecha de cancelación)."
   );
 
   translated = translated.replace(
-    /The current ([A-Za-z0-9\s]+) charge of \$([\d,.]+) is \$([\d,.]+) higher than the established historical amount of \$([\d,.]+),\s*which has been consistent across (\d+) previous monthly transactions from ([A-Za-z]+) to ([A-Za-z]+ \d{4})\.?/gi,
-    "El cobro actual de $1 de $$$2 es $$$3 superior al monto histórico establecido de $$$4, el cual se mantuvo consistente en $5 transacciones mensuales anteriores (de $6 a $7)."
-  );
-
-  translated = translated.replace(
-    /The current charge of \$([\d,.]+) is \$([\d,.]+) higher than the established historical amount of \$([\d,.]+)[^.]*\.?/gi,
-    "El cobro actual de $$$1 es $$$2 superior al monto histórico establecido de $$$3."
-  );
-
-  translated = translated.replace(
-    /This represents a (\d+)% price increase\.?/gi,
-    "Esto representa un incremento de precio del $1%."
+    /Duplicate charge detected:\s*The same ([A-Za-z0-9\s]+) subscription was charged twice on ([^ ]+) - once at ([^ ]+) \(([^)]+)\) and again at ([^ ]+) \(([^)]+)\), both for \$([\d,.]+)\.\s*These charges occurred only (\d+) minutes apart on the same billing day,\s*indicating the second charge is a duplicate\.?/gi,
+    "Cobro duplicado detectado: La misma suscripción de $1 fue cobrada dos veces el $2 (una vez a las $3 en $4 y otra a las $5 en $6, ambas por $$$7). Estos cobros ocurrieron con solo $8 minutos de diferencia en el mismo día de facturación, lo que indica que el segundo cobro es un duplicado."
   );
 
   translated = translated.replace(
@@ -164,12 +249,7 @@ export function localizeText(text: string | null | undefined, language: Language
   );
 
   translated = translated.replace(
-    /The current charge of \$([\d,.]+) matches the established historical pattern of monthly charges at the same amount\.?/gi,
-    "El cobro actual de $$$1 coincide con el patrón histórico mensual por el mismo monto."
-  );
-
-  translated = translated.replace(
-    /The subscription is active \(not cancelled\),\s*and this charge appears on the expected billing day \(([^)]+)\),\s*approximately one month after the previous charge\.?/gi,
+    /The subscription is (?:active|Active|Activa) \(not cancelled\),\s*and this charge appears on the expected billing day \(([^)]+)\),\s*approximately one month after the previous charge\.?/gi,
     "La suscripción está activa (no cancelada) y este cobro aparece en el día de facturación esperado ($1), aproximadamente un mes después del cobro anterior."
   );
 
@@ -183,7 +263,22 @@ export function localizeText(text: string | null | undefined, language: Language
     "Cobro analizado: transacción recurrente legítima, sin anomalía detectada."
   );
 
-  // 6. Evidence compilation sentences (EvidenceAgent)
+  // 4. Evidence compilation sentences
+  translated = translated.replace(
+    /Transactions ([a-z0-9_]+) and ([a-z0-9_]+) charged \$([\d,.]+) USD for the same ([A-Za-z0-9\s]+) subscription\.?/gi,
+    "Las transacciones $1 y $2 cobraron $$$3 USD por la misma suscripción de $4."
+  );
+
+  translated = translated.replace(
+    /The charges occurred (\d+) seconds apart\.?/gi,
+    "Los cobros ocurrieron con $1 segundos de diferencia."
+  );
+
+  translated = translated.replace(
+    /Invoices for both transactions are available\.?/gi,
+    "Las facturas de ambas transacciones están disponibles."
+  );
+
   translated = translated.replace(
     /([A-Za-z0-9\s]+) subscription ([a-z0-9_]+) was cancelled on (\d{4}-\d{2}-\d{2})\.?/gi,
     "La suscripción de $1 ($2) fue cancelada el $3."
@@ -244,7 +339,7 @@ export function localizeText(text: string | null | undefined, language: Language
     "Paquete de evidencia compilado: términos del contrato, facturas e historial de pagos."
   );
 
-  // 7. Negotiation Agent Sentences & Evaluation
+  // 5. Negotiation Agent Sentences & Evaluation
   translated = translated.replace(
     /The evidence strongly supports the full refund claim\.?/gi,
     "La evidencia respalda sólidamente la solicitud de reembolso total."
@@ -253,6 +348,21 @@ export function localizeText(text: string | null | undefined, language: Language
   translated = translated.replace(
     /The evidence strongly supports the full \$([\d,.]+) claim:?/gi,
     "La evidencia respalda sólidamente el reclamo por $$$1:"
+  );
+
+  translated = translated.replace(
+    /documented price history shows consistent \$([\d,.]+) charges,\s*current charge is \$([\d,.]+),\s*and critically,?\s*(?:No se encontró notificación de cambio de precio\.?|no price-change notification was found\.?)?/gi,
+    "el historial documentado muestra cobros consistentes por $$$1, el cobro actual es de $$$2 y, críticamente, no se encontró notificación de cambio de precio."
+  );
+
+  translated = translated.replace(
+    /A (\d+)% price increase without proper notification warrants the full refund\.?/gi,
+    "Un incremento de precio del $1% sin notificación previa amerita el reembolso total."
+  );
+
+  translated = translated.replace(
+    /The merchant's (\d+)% partial offer does not adequately address the lack of notification for this significant price change\.?/gi,
+    "La oferta parcial del $1% del comercio no compensa adecuadamente la falta de notificación de este significativo cambio de precio."
   );
 
   translated = translated.replace(
@@ -300,6 +410,64 @@ export function localizeText(text: string | null | undefined, language: Language
     "Se recomienda aceptar"
   );
 
+  // 6. Dates and Months
+  translated = translated.replace(/\bJanuary (\d{1,2}), (\d{4})\b/g, "$1 de enero de $2");
+  translated = translated.replace(/\bFebruary (\d{1,2}), (\d{4})\b/g, "$1 de febrero de $2");
+  translated = translated.replace(/\bMarch (\d{1,2}), (\d{4})\b/g, "$1 de marzo de $2");
+  translated = translated.replace(/\bApril (\d{1,2}), (\d{4})\b/g, "$1 de abril de $2");
+  translated = translated.replace(/\bMay (\d{1,2}), (\d{4})\b/g, "$1 de mayo de $2");
+  translated = translated.replace(/\bJune (\d{1,2}), (\d{4})\b/g, "$1 de junio de $2");
+  translated = translated.replace(/\bJuly (\d{1,2}), (\d{4})\b/g, "$1 de julio de $2");
+  translated = translated.replace(/\bAugust (\d{1,2}), (\d{4})\b/g, "$1 de agosto de $2");
+  translated = translated.replace(/\bSeptember (\d{1,2}), (\d{4})\b/g, "$1 de septiembre de $2");
+  translated = translated.replace(/\bOctober (\d{1,2}), (\d{4})\b/g, "$1 de octubre de $2");
+  translated = translated.replace(/\bNovember (\d{1,2}), (\d{4})\b/g, "$1 de noviembre de $2");
+  translated = translated.replace(/\bDecember (\d{1,2}), (\d{4})\b/g, "$1 de diciembre de $2");
+
+  translated = translated.replace(/\b(?:from|From) April (?:through|to) August (\d{4})\b/gi, "de abril a agosto de $1");
+  translated = translated.replace(/\bApril through August (\d{4})\b/gi, "abril a agosto de $1");
+  translated = translated.replace(/\bApril to August (\d{4})\b/gi, "abril a agosto de $1");
+  translated = translated.replace(/\bon the (\d+)(?:st|nd|rd|th)? of each month\b/gi, "el día $1 de cada mes");
+
+  // 7. Transaction details table & closings
+  translated = translated.replace(/Transaction details:/gi, "Detalles de la transacción:");
+  translated = translated.replace(/- Transaction ID:/gi, "- ID de Transacción:");
+  translated = translated.replace(/- Amount charged:/gi, "- Monto cobrado:");
+  translated = translated.replace(/- Date posted:/gi, "- Fecha registrada:");
+  translated = translated.replace(/- Subscription status at time of charge:/gi, "- Estado de suscripción al momento del cobro:");
+  translated = translated.replace(/Cancelled \(as of ([^)]+)\)/gi, "Cancelada (al $1)");
+  translated = translated.replace(/\bActive\b/g, "Activa");
+
+  translated = translated.replace(
+    /I respectfully request a full refund of \$([\d,.]+) USD for this post-cancellation charge\.?/gi,
+    "Solicito respetuosamente el reembolso total de $$$1 USD correspondiente a este cobro post-cancelación."
+  );
+
+  translated = translated.replace(
+    /I respectfully request a refund of \$([\d,.]+) USD to adjust this transaction to the historical and expected amount\.?/gi,
+    "Solicito respetuosamente un reembolso de $$$1 USD para ajustar esta transacción al monto histórico esperado."
+  );
+
+  translated = translated.replace(
+    /I respectfully request a full refund of \$([\d,.]+) USD for the duplicate charge\.?/gi,
+    "Solicito respetuosamente el reembolso total de $$$1 USD correspondiente al cobro duplicado."
+  );
+
+  translated = translated.replace(
+    /Thank you for your prompt attention to this matter\.?/gi,
+    "Agradezco de antemano su pronta atención a este caso."
+  );
+
+  translated = translated.replace(
+    /Best regards,?/gi,
+    "Atentamente,"
+  );
+
+  translated = translated.replace(
+    /Sincerely,?/gi,
+    "Atentamente,"
+  );
+
   // 8. Merchant Counter-offers & System Dispatches
   translated = translated.replace(
     /We can offer a one-time courtesy credit of \$([\d,.]+)\.?\s*(dólares\.?)?/gi,
@@ -326,10 +494,11 @@ export function localizeText(text: string | null | undefined, language: Language
     "Disputa presentada ante el comercio: monto reclamado $$$1 USD."
   );
 
-  translated = translated.replace(
-    /User requested a full refund/gi,
-    "El usuario solicitó un reembolso total"
-  );
+  // Clean up any double periods or awkward spacing
+  translated = translated.replace(/\.\.+/g, ".");
+  translated = translated.replace(/\s+,/g, ",");
+  translated = translated.replace(/\(\s+/g, "(");
+  translated = translated.replace(/\s+\)/g, ")");
 
   return translated;
 }
